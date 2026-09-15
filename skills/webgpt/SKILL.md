@@ -11,6 +11,9 @@ For installation or missing capabilities, follow [setup.md](references/setup.md)
 ## Dispatch
 
 - Verify the requested UI mode: `xh|xhigh` = Extra High (default), `p|pro` = Pro.
+- Send exactly one user message per task chat. Prepare the complete assignment before sending;
+  never send follow-ups, corrections or continuation requests in that chat. If further work is
+  needed, preserve and close the original task, then use a new chat with the necessary context.
 - Explain the objective, necessary context and success criteria naturally. Let WebGPT choose
   its tools and approach within the user's scope.
 - For direct project work, use the WebGPT Worker terminal and
