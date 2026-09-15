@@ -8,6 +8,12 @@ description: Use when the user requests WebGPT, including xh/xhigh or p/pro. Del
 Delegate to signed-in Web ChatGPT through documented, authorized browser controls.
 For installation or missing capabilities, follow [setup.md](references/setup.md).
 
+The existing local Node.js worker, not an LLM, handles saved results, completion notification and
+backup deadlines. Registration starts the deadline; completion/cancellation clears it automatically.
+WebGPT only performs the assignment and submits its result. Do not ask it to report periodically,
+start monitoring processes, or clean up chats. Codex receives the result and deletes the chat/tabs.
+Reuse the worker and one quiet wait process; do not add per-task daemons or cron jobs.
+
 ## Dispatch
 
 - Verify the requested UI mode: `xh|xhigh` = Extra High (default), `p|pro` = Pro.
@@ -40,8 +46,9 @@ tests together; request a concise result with changed files, check results, exis
 remaining issues. Leave execution to WebGPT.
 
 Wait for the saved completion event. Between events, do not inspect chats, screenshots, logs,
-files or processes to track progress. Every **15 minutes**, make one minimal status check of each
-due unfinished chat as a backup, not a progress audit or timeout. An explicit help/failure signal
+files or processes to track progress. Only when the worker returns `backupDue` (every **15 minutes**
+for unfinished work), Codex makes one minimal chat-status check, not a progress audit or timeout.
+The worker times the check; it does not read the browser. An explicit help/failure signal
 or user intervention permits targeted handling, not continuous monitoring.
 Keep empty wait renewals inside the runtime where supported; return to the model only for an
 event, a due backup check or an actionable error. Do not narrate unchanged waiting.
@@ -57,8 +64,8 @@ user/project requirement. Do not independently redo WebGPT's investigation or im
 A completion claim alone is not evidence. Resolve a concrete gap narrowly; otherwise acknowledge
 and clean up. Preserve partial results and report blockers honestly.
 
-Immediately remove finished or abandoned tasks from periodic checks and cancel their pending
-deadlines, regardless of cleanup status. Reconcile pending tasks after a context resume.
+The worker retires finished deadlines independently of Codex cleanup. Cancel abandoned tasks;
+remove collected IDs from the next wait. Reconcile pending tasks after a context resume.
 
 ## Close
 

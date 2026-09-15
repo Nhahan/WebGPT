@@ -15,6 +15,8 @@ Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
 Registration generates the ID automatically. It needs no task document:
 send the actual assignment directly in the single ChatGPT message, together with the task token
 and a request to submit the result when finished. Do not prescribe routine terminal commands.
+The worker also sets the backup deadline automatically; no extra timer setup or WebGPT reporting
+is needed. Result submission/cancellation clears it, even before Codex collects or deletes anything.
 The optional JSON-file/API form supports `instructions` and named `inputs` only when useful.
 Omit `terminal` for text-only work. Privately send the returned task token to WebGPT, never the
 controller key or connection URL. Give natural objectives and constraints, not tool sequences.
@@ -44,7 +46,9 @@ It returns completion `events`, `backupDue`, recovery needs, or `settled:true` w
 remains running; connection errors stop the wait. Remove collected IDs before the next wait.
 Keep that process running in the host runtime without inspecting progress.
 Unrelated saved events remain untouched. This is not a scheduler after Codex exits.
-A due backup check reads only enough to determine completion or a need for help.
+On `backupDue`, Codex reads only enough browser state to determine completion or a need for help.
+The Node.js worker performs timing and notification without LLM calls; it does not inspect or
+delete browser chats. Codex handles chat deletion and tab closure after result acceptance.
 
 Review the result under SKILL.md, then run `node <skill>/scripts/client.mjs collect <returned-id>`.
 This verifies the saved file hash and acknowledges receipt in one command, returning only summary
