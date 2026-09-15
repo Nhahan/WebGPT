@@ -50,6 +50,7 @@ Or specify another project:
 webgpt open /path/to/project
 ```
 
-Open a blank ChatGPT tab connected to your project's terminal. You start the conversation,
+Open a blank ChatGPT tab with the shared WebGPT Worker plugin and a tiny project connection file attached.
+You start the conversation,
 run the work and close the chat; Codex only sets up the connection.
 Terminal access expires after 24 hours without use; each use resets the timer.

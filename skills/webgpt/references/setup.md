@@ -1,9 +1,9 @@
 # Setup
 
 Install and verify a real browser-to-terminal connection. Honor the user's Install authorization;
-ask only for genuinely user-only actions such as sign-in. `webgpt open` already authorizes creating
-its project connection, sharing its private URL with ChatGPT and accepting matching dialogs;
-perform these actions without asking again. Preserve unrelated
+ask only for genuinely user-only actions such as sign-in. `webgpt open` uses the existing global
+WebGPT Worker plugin and authorizes attaching its project connection file to ChatGPT.
+Do not create per-project plugins. Preserve unrelated
 services, tabs and configuration. Do not delegate installation to WebGPT or substitute Chat On
 Steroids, another connector or an API model for the bundled WebGPT Worker.
 
@@ -45,9 +45,7 @@ Defaults: `~/.local/share/webgpt`, ports 43137/43139, `publicMcp:false`. Use act
 `WEBGPT_CONFIG` selects another config; `WEBGPT_DATA_DIR` overrides dataDir. Keep config/data outside
 projects and the installed skill. Protect data with POSIX mode 0700 or private Windows ACLs.
 Never print keys, tokens or credentials.
-Save the verified HTTPS forwarding origin as `publicOrigin` in this config (origin only, no secret
-path). The open command reads it directly. Update it only when the forwarding origin changes;
-normal use must not search setup logs for URLs.
+An existing `publicOrigin` setting may be retained, but normal open calls do not need a URL.
 
 Check port ownership; do not displace another process. Start
 `node <installed-skill>/scripts/worker.mjs`; verify ready output, MCP `/health`, and
@@ -60,6 +58,7 @@ after Codex exits and record the owned service. Keep the same data directory. Be
 Reuse the verified **WebGPT Worker** HTTPS connection and configuration. Inspect its URL and live
 tool schemas, not just its name. No OpenAI Platform login, API key, organization role or Secure
 MCP Tunnel account is needed.
+Install this one plugin globally for both delegated tasks and user-controlled open chats.
 
 1. Set `publicMcp:true` before forwarding. The worker creates private `mcp-path.key`; MCP is served
    only at `/mcp/<key>`. Verify plain `/mcp`, wrong routes and invalid task tokens are rejected.
