@@ -9,7 +9,7 @@
 Paste this into Codex:
 
 ```text
-Install https://github.com/Nhahan/WebGPT/tree/dev/skills/webgpt
+Install https://github.com/Nhahan/WebGPT/tree/main/skills/webgpt
 Follow the included references/setup.md and set up everything needed.
 Handle installation, configuration and verification yourself; assume no setup knowledge.
 I authorize the local worker and HTTPS forwarding, sharing its private connection
