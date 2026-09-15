@@ -6,7 +6,8 @@ description: Use when the user requests WebGPT, including xh/xhigh or p/pro. Del
 # WebGPT
 
 Delegate to signed-in Web ChatGPT through documented, authorized browser controls.
-For installation or missing capabilities, follow [setup.md](references/setup.md).
+Read [setup.md](references/setup.md) only for an installation request or an observed missing
+capability. Normal delegation reads workspace.md, not setup.md or the worker source.
 
 The existing local Node.js worker, not an LLM, handles saved results, completion notification and
 backup deadlines. Registration starts the deadline; completion/cancellation clears it automatically.
@@ -34,10 +35,14 @@ Reuse the worker and one quiet wait process; do not add per-task daemons or cron
 - Prepare mode, inputs and callback registration first. Fill and immediately submit the prompt
   in one browser call where supported, then verify submission before any retry.
 
-Prefer targeted accessibility text for browser decisions. Use documented `emit:false` observations
-and return only the relevant controls or outcome where supported. Do not emit screenshots,
-full page trees or conversation exports unless text cannot resolve the next action; never echo
-image/base64 payloads as text. Preserve required first-use documentation and tool permission gates.
+For browser observations, use documented `getAXState({emit:false})` after actions as well as before
+them; output only lines needed for the next decision. Do not call bare `getAXState()` or write the
+whole returned string: either can reintroduce large automatic output. For example:
+`nodeRepl.write((await tab.getAXState({emit:false})).split('\n').filter(line => /Delete|Cancel/.test(line)).join('\n'))`.
+Choose the filter for the actual UI language and needed controls; expand only if it misses them.
+Reuse a visibly correct mode instead of reopening its settings. Request images only when text
+cannot resolve the next action. Preserve mandatory first-use output, fresh target grounding and
+permission gates; never echo image/base64 payloads as text or export the conversation by default.
 
 ## Collect
 
