@@ -32,8 +32,13 @@ Reuse the worker and one quiet wait process; do not add per-task daemons or cron
   Text-only tasks need no connector.
 - Reuse registration output for the task ID; retain owned chat/tab identifiers in the current
   context. Do not create separate tracking files unless recovery genuinely requires one.
-- Prepare mode, inputs and callback registration first. Fill and immediately submit the prompt
-  in one browser call where supported, then verify submission before any retry.
+- Prepare the complete prompt and registration before opening the task tab. Include its session
+  name in tab creation instead of a separate naming call when supported.
+- Batch tab creation, current-mode/composer observation, any grounded mode selection, prompt
+  entry and submission as far as documented controls allow. If the requested mode is already
+  visible, skip selection. Return to the model only for unknown controls, ambiguity or a required
+  gate; do not force a single blind call. Never invent model URL parameters or assume a mode.
+  Fill and send together, then verify submission before any retry.
 
 For browser observations, use documented `getAXState({emit:false})` after actions as well as before
 them; output only lines needed for the next decision. Do not call bare `getAXState()` or write the
@@ -81,6 +86,10 @@ After preserving and accepting or rejecting the result (no separate report requi
   is actually required.
 - Verify chat deletion, then close and verify removal of all task-owned tabs, including recovery
   duplicates. Closing a tab is not proof of deleting its chat.
+- Batch grounded menu/delete/dialog actions, deletion verification, tab closure and absence
+  verification in one call when supported. Keep intermediate state checks inside that call and
+  return only the final outcome. Pause only for a newly unknown control or required confirmation;
+  never bypass those gates or close before deletion is verified.
 - Preserve unrelated chats, tabs, user data and shared services. Never delete uncollected work.
 - Perform cleanup without unnecessary delays or repeated observations. If blocked, retain exact
   chat/tab identifiers and report the remaining action; do not claim cleanup complete.
