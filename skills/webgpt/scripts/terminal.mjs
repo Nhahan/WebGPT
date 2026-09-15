@@ -23,19 +23,19 @@ export class Terminals {
     cwd ??= grant.cwd;
     if (typeof cwd !== 'string' || !isAbsolute(cwd)) throw Error('cwd must be absolute');
     shell ??= process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : (process.env.SHELL || '/bin/sh');
-    const args = process.platform === 'win32' && /(?:^|[\\/])cmd(?:\.exe)?$/i.test(shell)
-      ? ['/d', '/s', '/c', command] : ['-c', command];
+    const cmdShell = process.platform === 'win32' && /(?:^|[\\/])cmd(?:\.exe)?$/i.test(shell);
+    const args = cmdShell ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command];
     const id = randomUUID();
     const session = {owner, output:'', exit_code:null, signal:null, done:false, listeners:new Set()};
     const notify = () => { for (const f of [...session.listeners]) f(); };
     if (tty) {
-      const child = pty.spawn(shell, args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30});
+      const child = pty.spawn(shell, cmdShell ? args.join(' ') : args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30});
       session.write = text => child.write(text);
       session.kill = signal => child.kill(signal);
       child.onData(text => {session.output += text; notify();});
       child.onExit(({exitCode, signal}) => {session.done=true; session.exit_code=exitCode; session.signal=signal ?? null; notify();});
     } else {
-      const child = spawn(shell, args, {cwd, env:process.env, detached:process.platform !== 'win32', stdio:'pipe'});
+      const child = spawn(shell, args, {cwd, env:process.env, windowsVerbatimArguments:cmdShell, detached:process.platform !== 'win32', stdio:'pipe'});
       session.write = text => child.stdin.write(text);
       session.kill = signal => {
         if (!child.pid) return;
