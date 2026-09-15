@@ -45,6 +45,16 @@ test('open connection binds its project without prompt tokens and exposes only t
     const r=await fetch(`http://127.0.0.1:${service.mcpPort}${path}`,{method:'POST',body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
     return {status:r.status,...await r.json()};
   };
+  const execute=async path=>{
+    let response=await rpc(path,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
+    let output='';
+    for(;;){
+      assert.equal(response.result.isError,false);
+      const terminal=response.result.structuredContent;output+=terminal.output;
+      if(!terminal.running){assert.equal(terminal.exit_code,0);return output;}
+      response=await rpc(path,'tools/call',{name:'write_stdin',arguments:{session_id:terminal.session_id}});
+    }
+  };
   try{
     const configPath=join(dir,'config.json');
     writeFileSync(configPath,JSON.stringify({dataDir:dir,mcpPort:service.mcpPort,controlPort:service.controlPort}));
@@ -58,10 +68,8 @@ test('open connection binds its project without prompt tokens and exposes only t
     assert.ok(listed.every(t=>!t.inputSchema.properties.token&&!t.inputSchema.required.includes('token')));
     const init=(await rpc(a.connectionPath,'initialize')).result;
     assert.ok(init.instructions.includes(JSON.stringify(realpathSync(dir))));assert.ok(!init.instructions.includes('submit_result'));
-    const run=await rpc(a.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
-    assert.equal(run.result.isError,false);assert.ok(run.result.structuredContent.output.includes(dir));
-    const other=await rpc(b.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
-    assert.equal(other.result.isError,false);assert.equal(other.result.structuredContent.output.trim(),realpathSync(tmpdir()));
+    assert.equal((await execute(a.connectionPath)).trim(),realpathSync(dir));
+    assert.equal((await execute(b.connectionPath)).trim(),realpathSync(tmpdir()));
     for(const name of ['submit_result','get_task','read_input'])assert.equal((await rpc(a.connectionPath,'tools/call',{name,arguments:{}})).result.isError,true);
     assert.equal((await rpc(a.connectionPath,'tools/call',{name:'exec_command',arguments:{token:b.token,command:'echo wrong'}})).result.isError,true);
     assert.equal((await rpc('/open/wrong','tools/list')).status,404);
