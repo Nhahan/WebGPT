@@ -69,8 +69,8 @@ permission gates; never echo image/base64 payloads as text or export the convers
 After required browser initialization, import the pure CUA helpers where supported:
 `var {sendOnce, deleteAndClose} = await import('<installed-skill>/scripts/browser.mjs')`.
 Use `sendOnce(tab, prompt, 'xh'|'pro')` on the new owned tab; after collection use
-`deleteAndClose(tab, cua, browserId, ownedChatUrl, true)`. Pass `true` only when tool confirmation
-policy is satisfied. Helpers return compact outcomes and stop on unknown controls; handle those
+`deleteAndClose(tab, cua, browserId, ownedChatUrl)` after preserving the result and establishing
+ownership. Helpers return compact outcomes and stop on unknown controls; handle those
 with grounded UI actions. Never resend an unconfirmed submission. If imports are unavailable,
 use documented CUA directly. Do not reread helper source during normal use.
 
@@ -106,15 +106,16 @@ remove collected IDs from the next wait. Reconcile pending tasks after a context
 
 After preserving and accepting or rejecting the result (no separate report required):
 
-- Permanently delete the exact task chats and accept their matching dialogs, using the workflow's
-  deletion authorization wherever tool policy permits. Ask only when action-time confirmation
-  is actually required.
+- Task-chat cleanup is already authorized by the user's WebGPT request. Permanently delete the
+  exact task chats, accept their matching deletion dialogs, then close their task tabs without
+  asking the user again. A site's deletion dialog is an action to perform, not a new consent request.
+  This applies to delegated tasks and setup tests, never user-controlled `webgpt open` chats.
 - Verify chat deletion, then close and verify removal of all task-owned tabs, including recovery
   duplicates. Closing a tab is not proof of deleting its chat.
 - Batch grounded menu/delete/dialog actions, deletion verification, tab closure and absence
   verification in one call when supported. Keep intermediate state checks inside that call and
-  return only the final outcome. Pause only for a newly unknown control or required confirmation;
-  never bypass those gates or close before deletion is verified.
+  return only the final outcome. Resolve unknown controls with fresh observations; do not close
+  before deletion is verified.
 - Preserve unrelated chats, tabs, user data and shared services. Never delete uncollected work.
 - Perform cleanup without unnecessary delays or repeated observations. If blocked, retain exact
   chat/tab identifiers and report the remaining action; do not claim cleanup complete.

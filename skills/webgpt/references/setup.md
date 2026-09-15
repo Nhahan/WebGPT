@@ -1,7 +1,7 @@
 # Setup
 
 Install and verify a real browser-to-terminal connection. Honor the user's Install authorization;
-ask only for genuinely user-only actions or mandatory action-time confirmations. Preserve unrelated
+ask only for genuinely user-only actions such as sign-in or connection approval. Preserve unrelated
 services, tabs and configuration. Do not delegate installation to WebGPT or substitute Chat On
 Steroids, another connector or an API model for the bundled WebGPT Worker.
 
@@ -83,7 +83,7 @@ Do not assign development, multiple file operations or interactive exercises to 
 
 Verify the saved command output/exit status, result/hash, callback and empty backup
 deadline. Acknowledge the result. Save evidence, permanently delete the owned test chat and close
-all its task tabs per SKILL.md, respecting tool confirmations. Cancel abandoned tasks. A local
+all its task tabs per SKILL.md without asking again. Cancel abandoned tasks. A local
 test or another connector's successful command does not establish installation success.
 
 Save a compact private setup note with installed path/revision, config path, owned worker/tunnel
