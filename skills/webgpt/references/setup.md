@@ -76,12 +76,12 @@ worker is stopped. No paid account or public plugin publication is needed.
 
 ## End-to-end test
 
-Register one task with `terminal:{cwd}` for an owned temporary project. In a real Extra High or Pro
-chat, ask WebGPT to use **WebGPT Worker** to create/read/edit/delete a disposable file through the
-terminal, run a command, exercise interactive terminal input, and submit its result. State the
-outcome and token, not a prescribed tool sequence. Do not perform its probe operations yourself.
+Register access to an owned temporary project. In one Extra High or Pro message, ask WebGPT to
+use **WebGPT Worker** to print a short value through the terminal and submit its result.
+The command should execute in about one second; model/browser latency is separate.
+Do not assign development, multiple file operations or interactive exercises to this smoke test.
 
-Verify actual tool calls, disk state, exit status, saved result/hash, callback and empty backup
+Verify the saved command output/exit status, result/hash, callback and empty backup
 deadline. Acknowledge the result. Save evidence, permanently delete the owned test chat and close
 all its task tabs per SKILL.md, respecting tool confirmations. Cancel abandoned tasks. A local
 test or another connector's successful command does not establish installation success.

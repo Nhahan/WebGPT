@@ -15,20 +15,27 @@ For installation or missing capabilities, follow [setup.md](references/setup.md)
   never send follow-ups, corrections or continuation requests in that chat. If further work is
   needed, preserve and close the original task, then use a new chat with the necessary context.
 - Explain the objective, necessary context and success criteria naturally. Let WebGPT choose
-  its tools and approach within the user's scope.
+  its tools and approach within the user's scope. Put the assignment only in that chat message;
+  do not duplicate it in registration files or generate task plans, ledgers or handoff documents
+  unless needed for the actual deliverable. The worker already saves the result.
 - For direct project work, use the WebGPT Worker terminal and
   [workspace.md](references/workspace.md). Set the project cwd; it is not a sandbox.
   Reuse verified setup; diagnose access only when unavailable or an actual call fails.
   Report missing access instead of silently doing the work yourself.
   Text-only tasks need no connector.
-- Keep a private record sufficient to recover task IDs, owned chats/tabs, results and pending checks.
+- Retain only the task ID and owned chat/tab identifiers needed for recovery and cleanup.
 - Prepare mode, inputs and callback registration first. Fill and immediately submit the prompt
   in one browser call where supported, then verify submission before any retry.
+
+Prefer targeted accessibility text for browser decisions. Use documented `emit:false` observations
+and return only the relevant controls or outcome where supported. Do not emit screenshots,
+full page trees or conversation exports unless text cannot resolve the next action; never echo
+image/base64 payloads as text. Preserve required first-use documentation and tool permission gates.
 
 ## Collect
 
 Use result acceptance, never continuous supervision. Delegate implementation and its relevant
-tests together; request a concise handoff with changed files, check results, evidence paths and
+tests together; request a concise result with changed files, check results, existing evidence paths and
 remaining issues. Leave execution to WebGPT.
 
 Wait for the saved completion event. Between events, do not inspect chats, screenshots, logs,
@@ -39,8 +46,8 @@ Keep empty wait renewals inside the runtime where supported; return to the model
 event, a due backup check or an actionable error. Do not narrate unchanged waiting.
 Waiting requires an active parent runtime; this skill supplies no after-exit wake-up or cron job.
 
-At completion, collect and review the handoff once against the requested outcome. Preserve full
-evidence on disk; load only the summary, relevant diff and specific evidence needed for acceptance,
+At completion, review the saved result once against the requested outcome. Reuse existing
+evidence rather than creating duplicate reports; load only the summary, relevant diff and evidence,
 not entire transcripts or logs. Check saved-result integrity and distinguish PASS/FAIL/NOT_RUN.
 Accept supported tests on the delivered version without rerunning them. Add only targeted checks
 for failures, missing or conflicting evidence, subsequent integration changes, or an explicit
@@ -63,3 +70,7 @@ After preserving results and recording their verification status:
 - Preserve unrelated chats, tabs, user data and shared services. Never delete uncollected work.
 - Perform cleanup without unnecessary delays or repeated observations. If blocked, retain exact
   chat/tab identifiers and report the remaining action; do not claim cleanup complete.
+
+For workflow smoke tests, use a trivial operation that executes in about one second, such as
+printing a value. Do not assign development, research, or a test suite merely to test delegation.
+Model, browser and network latency are separate and cannot be promised to finish in one second.

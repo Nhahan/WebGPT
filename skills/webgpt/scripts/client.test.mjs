@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,18 @@ import { configuration, request, waitForTasks } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('CLI registers project access without a task document or duplicated instructions', () => fixture(async ({dir,config,service,admin})=>{
+  const file=join(dir,'config.json');writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const {stdout}=await execute(process.execPath,[cli,'register','--cwd',dir],{env});
+  const task=JSON.parse(stdout);
+  const context=(await invoke(service,'get_task',{token:task.token})).structuredContent;
+  assert.equal(context.instructions,'');
+  assert.equal(context.terminal.cwd,realpathSync(dir));
+  await admin('cancel',{id:task.id});
+  await assert.rejects(execute(process.execPath,[cli,'register','--cwd'],{env}),/usage/);
+}));
 test('minimal registration generates unique IDs and CLI waits using the returned ID', () => fixture(async ({dir,config,service,admin})=>{
   const a=await admin('register',{instructions:'First'});
   const b=await admin('register',{instructions:'Second'});

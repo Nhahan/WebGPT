@@ -11,21 +11,15 @@ not enforced restrictions. Never silently upgrade a file-only grant to shell acc
 
 ## Assign
 
-Import `request` from installed `scripts/client.mjs`, or run
-`node <skill>/scripts/client.mjs register <private-task.json>` with:
-
-```json
-{
-  "instructions": "Implement the requested change and verify it. Preserve unrelated edits.",
-  "terminal": { "cwd": "/absolute/project" }
-}
-```
-
-Registration generates the ID automatically; optional `inputs` supplies named text.
+Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
+Registration generates the ID automatically. It needs no task document:
+send the actual assignment directly in the single ChatGPT message, together with the task token
+and a request to submit the result when finished. Do not prescribe routine terminal commands.
+The optional JSON-file/API form supports `instructions` and named `inputs` only when useful.
 Omit `terminal` for text-only work. Privately send the returned task token to WebGPT, never the
 controller key or connection URL. Give natural objectives and constraints, not tool sequences.
 
-- `get_task(token)` returns the assignment; `read_input(token,name)` returns supplied text.
+- `get_task(token)` returns registered context if needed; `read_input(token,name)` returns supplied text.
 - `exec_command(token,command,cwd?,shell?,tty?,yield_ms?)` starts a command. `tty:true` enables a
   real PTY. Defaults to the assigned cwd and OS shell. Returns all available output, exit status,
   and a `session_id`. With `running:true`, the command continues between calls.

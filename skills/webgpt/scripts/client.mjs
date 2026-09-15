@@ -29,7 +29,7 @@ export async function request(action, payload, config = configuration()) {
   const read = ['wait', 'status'].includes(action);
   if (!read && !['register', 'ack', 'checked', 'cancel'].includes(action)) throw Error('unknown controller action');
   if (read ? payload !== undefined && !(action === 'wait' && Array.isArray(payload?.ids) && payload.ids.length && payload.ids.every(id => typeof id === 'string')) : !payload || typeof payload !== 'object') throw Error('invalid controller payload');
-  if (action === 'register') payload = { id: randomUUID(), inputs: {}, ...payload };
+  if (action === 'register') payload = { id: randomUUID(), instructions: '', inputs: {}, ...payload };
   const key = readFileSync(join(config.dataDir, 'controller.key'), 'utf8');
   const query = action === 'wait' && payload ? '?' + new URLSearchParams(payload.ids.map(id => ['id', id])) : '';
   const response = await fetch('http://127.0.0.1:' + config.controlPort + '/' + action + query, {
@@ -61,6 +61,9 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
       const ids = saved ? saved.ids ?? [saved.id] : args;
       if (!ids.length) throw Error('usage: client.mjs wait <task-id> [task-id ...]');
       result = await waitForTasks(ids);
+    } else if (action === 'register' && args[0] === '--cwd') {
+      if (args.length !== 2) throw Error('usage: client.mjs register --cwd <project-directory>');
+      result = await request('register', { terminal: { cwd: args[1] } });
     } else if (['ack', 'checked', 'cancel'].includes(action)) {
       if (args.length !== 1) throw Error(`usage: client.mjs ${action} <task-id|json-file>`);
       const payload = existsSync(args[0]) ? JSON.parse(readFileSync(args[0], 'utf8')) : { id: args[0] };
