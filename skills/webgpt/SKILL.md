@@ -6,6 +6,8 @@ description: Use for WebGPT requests, including xh/xhigh, p/pro, or open. Delega
 # WebGPT
 
 Delegate to signed-in Web ChatGPT through documented, authorized browser controls.
+Write Codex-authored instructions to WebGPT in English by default; honor explicit language
+requests and preserve source text where needed. Keep the requested deliverable language unchanged.
 Read [setup.md](references/setup.md) only for an installation request or an observed missing
 capability. Normal delegation reads workspace.md, not setup.md or the worker source.
 
