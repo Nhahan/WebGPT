@@ -30,7 +30,7 @@ export class Terminals {
     session.finished = new Promise(resolve => {session.finish = resolve;});
     const notify = () => { for (const f of [...session.listeners]) f(); };
     if (tty) {
-      const child = pty.spawn(shell, cmdShell ? args.join(' ') : args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30});
+      const child = pty.spawn(shell, cmdShell ? args.join(' ') : args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30, useConptyDll:process.platform === 'win32'});
       session.write = text => child.write(text);
       session.kill = signal => {
         if(process.platform !== 'win32') child.kill(signal);
