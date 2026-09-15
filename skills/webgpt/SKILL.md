@@ -23,14 +23,26 @@ For installation or missing capabilities, follow [setup.md](references/setup.md)
 
 ## Collect
 
-Prefer the worker's saved completion event and controller wait. Every **15 minutes**, check only
-due unfinished chats as a backup; this is not a task timeout. Avoid polling between backup checks.
+Use result acceptance, never continuous supervision. Delegate implementation and its relevant
+tests together; request a concise handoff with changed files, check results, evidence paths and
+remaining issues. Leave execution to WebGPT.
+
+Wait for the saved completion event. Between events, do not inspect chats, screenshots, logs,
+files or processes to track progress. Every **15 minutes**, make one minimal status check of each
+due unfinished chat as a backup, not a progress audit or timeout. An explicit help/failure signal
+or user intervention permits targeted handling, not continuous monitoring.
+Keep empty wait renewals inside the runtime where supported; return to the model only for an
+event, a due backup check or an actionable error. Do not narrate unchanged waiting.
 Waiting requires an active parent runtime; this skill supplies no after-exit wake-up or cron job.
 
-Collect finished results promptly, including partial results on failure. Save evidence, inspect
-actual changes and run relevant checks before acknowledgment. Report PASS/FAIL/NOT_RUN honestly;
-a completion signal alone does not prove success. Preserve partial work and report a concrete
-blocker if recovery cannot progress.
+At completion, collect and review the handoff once against the requested outcome. Preserve full
+evidence on disk; load only the summary, relevant diff and specific evidence needed for acceptance,
+not entire transcripts or logs. Check saved-result integrity and distinguish PASS/FAIL/NOT_RUN.
+Accept supported tests on the delivered version without rerunning them. Add only targeted checks
+for failures, missing or conflicting evidence, subsequent integration changes, or an explicit
+user/project requirement. Do not independently redo WebGPT's investigation or implementation.
+A completion claim alone is not evidence. Resolve a concrete gap narrowly; otherwise acknowledge
+and clean up. Preserve partial results and report blockers honestly.
 
 Immediately remove finished or abandoned tasks from periodic checks and cancel their pending
 deadlines, regardless of cleanup status. Reconcile pending tasks after a context resume.

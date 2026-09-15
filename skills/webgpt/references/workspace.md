@@ -43,11 +43,14 @@ Tokens separate cooperative tasks, not hostile shell users. Do not expose this t
 
 ## Collect
 
-`request('wait')` returns completion `events`, `backupDue`, or after at most 55 seconds. Use runtime
-waits or independent work; inspect unfinished chats when their 15-minute backup check is due.
-This is not a scheduler after Codex exits.
+`request('wait')` returns completion `events`, `backupDue`, or after at most 55 seconds. Renew empty
+waits within the host runtime where supported, without model output or progress inspection.
+Surface only completion, a due 15-minute backup check, or an actionable error. Scope waits to
+assigned task IDs; unrelated saved events are not work to collect. This is not a scheduler after
+Codex exits. A backup check reads only enough to determine completion or a need for help.
 
-Verify saved result SHA-256 and actual changes/tests, then `request('ack',{id})`. After a due check,
+Verify saved result SHA-256 and accept the handoff under SKILL.md's result-acceptance rules;
+this does not require rerunning the worker's tests. Then `request('ack',{id})`. After a due check,
 use `request('checked',{id})`; abandoned tasks use `request('cancel',{id})`. Terminal tasks are not
 rescheduled. Ack/cancel revoke tokens; saved results survive restarts. Delete task chats and close
 their tabs per SKILL.md. Preserve personal chats.
