@@ -13,8 +13,9 @@ Install https://github.com/Nhahan/WebGPT/tree/main/skills/webgpt
 Follow the included references/setup.md and set up everything needed.
 Handle installation, configuration and verification yourself; assume no setup knowledge.
 I authorize the local worker and HTTPS forwarding, sharing its private connection
-URL with my signed-in ChatGPT, and granting WebGPT read/create/edit/delete access
-to projects I assign. Run the setup test, then permanently delete its test chats
+URL with my signed-in ChatGPT, and granting WebGPT full terminal access as my local
+OS user for projects I assign (the project folder is not a sandbox).
+Run the setup test, then permanently delete its test chats
 and close its tabs. Do not ask again for these approved actions.
 Ask only for sign-in or another action that genuinely requires me; continue afterward.
 ```

@@ -1,16 +1,129 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { configuration, request } from './client.mjs';
+import { configuration, request, waitForTasks, collectTask } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('collection verifies saved bytes before acknowledgment without duplicating the result', () => fixture(async ({config,service,admin})=>{
+  const task=await admin('register',{instructions:'test'});
+  await invoke(service,'submit_result',{token:task.token,status:'completed',summary:'done',result:'original'});
+  const event=(await admin('wait',{ids:[task.id]})).events[0];
+  writeFileSync(event.artifact,'changed');
+  await assert.rejects(collectTask(task.id,config),/integrity mismatch/);
+  assert.equal((await admin('status')).events.length,1);
+  writeFileSync(event.artifact,'original');
+  const collected=await collectTask(task.id,config);
+  assert.equal(collected.integrity,'verified');
+  assert.equal(collected.collected,true);
+  assert.equal(collected.result,undefined);
+  assert.equal(readFileSync(event.artifact,'utf8'),'original');
+  assert.equal((await admin('status')).events.length,0);
+  assert.equal((await invoke(service,'get_task',{token:task.token})).isError,true);
+}));
+test('CLI registers project access without a task document or duplicated instructions', () => fixture(async ({dir,config,service,admin})=>{
+  const file=join(dir,'config.json');writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const {stdout}=await execute(process.execPath,[cli,'register','--cwd',dir],{env});
+  const task=JSON.parse(stdout);
+  const context=(await invoke(service,'get_task',{token:task.token})).structuredContent;
+  assert.equal(context.instructions,'');
+  assert.equal(context.terminal.cwd,realpathSync(dir));
+  await admin('cancel',{id:task.id});
+  await assert.rejects(execute(process.execPath,[cli,'register','--cwd'],{env}),/usage/);
+}));
+test('minimal registration generates unique IDs and CLI waits using the returned ID', () => fixture(async ({dir,config,service,admin})=>{
+  const a=await admin('register',{instructions:'First'});
+  const b=await admin('register',{instructions:'Second'});
+  assert.notEqual(a.id,b.id);
+  assert.deepEqual((await invoke(service,'get_task',{token:a.token})).structuredContent.inputs,[]);
+  await invoke(service,'submit_result',{token:a.token,status:'completed',summary:'done',result:'done'});
+  const file=join(dir,'config.json');writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const {stdout}=await execute(process.execPath,[cli,'wait',a.id],{env});
+  assert.deepEqual(JSON.parse(stdout).events.map(e=>e.id),[a.id]);
+  await assert.rejects(execute(process.execPath,[cli,'wait'],{env}),/usage/);
+  await admin('cancel',{id:b.id});
+}));
+test('ack, checked and cancel CLI accept direct task IDs and legacy JSON files', () => fixture(async ({dir,config,service,admin,advance})=>{
+  const file=join(dir,'config.json'); writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const run=(...args)=>execute(process.execPath,[cli,...args],{env});
+
+  for (const mode of ['direct','file']) {
+    const ack=await admin('register',{id:`${mode}-ack`,instructions:'ack',inputs:{}});
+    await invoke(service,'submit_result',{token:ack.token,status:'completed',summary:'done',result:'done'});
+    const checked=await admin('register',{id:`${mode}-checked`,instructions:'checked',inputs:{}});
+    const cancelled=await admin('register',{id:`${mode}-cancel`,instructions:'cancel',inputs:{}});
+    advance(1200000);
+    assert.ok((await admin('status')).backupDue.includes(checked.id));
+
+    const argFor=id=>{
+      if(mode==='direct') return id;
+      const payload=join(dir,`${id}.json`); writeFileSync(payload,JSON.stringify({id})); return payload;
+    };
+    await run('ack',argFor(ack.id));
+    await run('checked',argFor(checked.id));
+    await run('cancel',argFor(cancelled.id));
+
+    const status=await admin('status');
+    assert.ok(!status.events.some(event=>event.id===ack.id));
+    assert.ok(!status.backupDue.includes(checked.id));
+    assert.equal((await invoke(service,'get_task',{token:cancelled.token})).isError,true);
+  }
+
+  for (const action of ['ack','checked','cancel']) {
+    await assert.rejects(run(action),new RegExp(`usage: client\.mjs ${action}`));
+    await assert.rejects(run(action,'one','two'),new RegExp(`usage: client\.mjs ${action}`));
+  }
+}));
+
+test('quiet wait renews empty responses internally and surfaces completion or errors', async () => {
+  let calls=0;
+  const result=await waitForTasks(['owned'], {}, async (action,payload)=>{
+    assert.equal(action,'wait'); assert.deepEqual(payload,{ids:['owned']});
+    return ++calls<3 ? {events:[],backupDue:[],settled:false} : {events:[{id:'owned'}],backupDue:[]};
+  });
+  assert.equal(calls,3); assert.equal(result.events[0].id,'owned');
+  await assert.rejects(waitForTasks(['owned'],{},async()=>{throw Error('connection lost');}),/connection lost/);
+  assert.equal((await waitForTasks(['owned'],{},async()=>({events:[],backupDue:[],settled:true}))).settled,true);
+});
+
+test('scoped wait ignores foreign events and wakes on owned completion or cancellation', () => fixture(async ({service,admin,config})=>{
+  const foreign=await admin('register',{id:'foreign',instructions:'Other task',inputs:{}});
+  const owned=await admin('register',{id:'owned',instructions:'My task',inputs:{}});
+  await invoke(service,'submit_result',{token:foreign.token,status:'completed',summary:'foreign',result:'foreign'});
+  let resolved=false;
+  const waiting=waitForTasks(['owned'],config).then(v=>{resolved=true;return v;});
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert.equal(resolved,false);
+  await invoke(service,'submit_result',{token:owned.token,status:'completed',summary:'owned',result:'owned'});
+  assert.deepEqual((await waiting).events.map(e=>e.id),['owned']);
+  await admin('register',{id:'cancelled',instructions:'Cancel task',inputs:{}});
+  const cancelled=waitForTasks(['cancelled'],config);
+  await admin('cancel',{id:'cancelled'});
+  assert.equal((await cancelled).settled,true);
+  await assert.rejects(waitForTasks(['missing'],config),/unknown task/);
+  assert.ok((await admin('status')).events.some(e=>e.id==='foreign'));
+}));
+test('client and worker modules can be imported from stdin scripts', async () => {
+  const client = new URL('./client.mjs', import.meta.url).href;
+  const worker = new URL('./worker.mjs', import.meta.url).href;
+  const stdout = await new Promise((resolve,reject) => {
+    const child=execFile(process.execPath,['--input-type=module','-'],(error,stdout)=>error?reject(error):resolve(stdout));
+    child.stdin.end(`await import(${JSON.stringify(client)}); await import(${JSON.stringify(worker)}); console.log('imported');`);
+  });
+  assert.equal(stdout.trim(),'imported');
+});
 const invoke = async (s, name, args) => {
   const response = await fetch(`http://127.0.0.1:${s.mcpPort}/mcp`, {
     method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
@@ -102,18 +215,18 @@ test('parallel early completions persist, verify their hashes and retry idempote
   assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
 }));
 
-test('15-minute backup checks reset only running tasks and never revive terminal tasks', () => fixture(async ({ service, admin, advance }) => {
+test('20-minute backup checks reset only running tasks and never revive terminal tasks', () => fixture(async ({ service, admin, advance }) => {
   const a = await admin('register', { id: 'a', instructions: 'Review', inputs: {} });
   await admin('register', { id: 'b', instructions: 'Review', inputs: {} });
-  advance(899999); assert.deepEqual((await admin('status')).backupDue, []);
+  advance(1199999); assert.deepEqual((await admin('status')).backupDue, []);
   advance(1); assert.deepEqual((await admin('wait')).backupDue, ['a', 'b']);
   await invoke(service, 'submit_result', { token: a.token, status: 'completed', summary: 'done', result: 'done' });
   await admin('checked', { id: 'b' });
   assert.deepEqual((await admin('status')).backupDue, []);
-  advance(900000); assert.deepEqual((await admin('status')).backupDue, ['b']);
+  advance(1200000); assert.deepEqual((await admin('status')).backupDue, ['b']);
   await admin('checked', { id: 'a' }); await admin('ack', { id: 'a' });
   await admin('cancel', { id: 'b' });
-  advance(900000); assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
+  advance(1200000); assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
 }));
 
 test('a single text-only task survives backup intervals and restart, then completes without file access', () => fixture(async f => {
@@ -121,7 +234,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   const task = await f.admin('register', {
     id: 'transcript-analysis', instructions: 'Analyze the supplied transcript.', inputs: { transcript },
   });
-  assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.workspace, null);
+  assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.terminal, null);
   assert.equal((await invoke(f.service, 'read_input', { token: task.token, name: 'transcript' })).structuredContent.text, transcript);
   for (const name of ['list_files', 'read_file', 'write_file', 'delete_file']) {
     assert.equal((await invoke(f.service, name, {
@@ -130,7 +243,7 @@ test('a single text-only task survives backup intervals and restart, then comple
     })).isError, true);
   }
   // Advance only the fixture clock: backup checks are not execution deadlines.
-  for (const elapsed of [900000, 24 * 60 * 60 * 1000]) {
+  for (const elapsed of [1200000, 24 * 60 * 60 * 1000]) {
     f.advance(elapsed);
     assert.deepEqual(await f.admin('status'), { events: [], backupDue: [task.id] });
     assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.status, 'running');
@@ -143,7 +256,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   assert.equal((await invoke(f.service, 'submit_result', {
     token: task.token, status: 'completed', summary: 'Analysis complete', result,
   })).isError, false);
-  f.advance(900000);
+  f.advance(1200000);
   const notice = await f.admin('wait');
   assert.deepEqual(notice.backupDue, []);
   assert.equal(notice.events.length, 1);
@@ -152,9 +265,9 @@ test('a single text-only task survives backup intervals and restart, then comple
   assert.equal(notice.events[0].sha256, createHash('sha256').update(result).digest('hex'));
   const saved = JSON.parse(readFileSync(join(f.dir, 'state.json'), 'utf8'))[0];
   assert.equal(saved.nextCheck, null);
-  assert.deepEqual(saved.changes, []);
+  assert.equal(saved.terminal, null);
   await f.admin('ack', { id: task.id });
-  f.advance(900000);
+  f.advance(1200000);
   assert.deepEqual(await f.admin('wait'), { events: [], backupDue: [] });
 }));
 
@@ -203,31 +316,4 @@ test('one data directory cannot be opened by two workers even on different ports
   assert.deepEqual(await f.admin('status'), { events: [], backupDue: [] });
   await f.restart();
   assert.deepEqual(await f.admin('status'), { events: [], backupDue: [] });
-}));
-
-test('restart restores missing applied receipts and surfaces ambiguous crash journals without replaying writes', () => fixture(async f => {
-  const root = join(f.dir, 'project'); mkdirSync(root);
-  const a = await f.admin('register', { id: 'a', instructions: 'edit', inputs: {}, workspace: { root, mode: 'edit' } });
-  const changed = await invoke(f.service, 'write_file', { token: a.token, path: 'a.txt', text: 'applied', expectedSha256: null });
-  assert.equal(changed.isError, false);
-  // Simulate the crash window after mutation/journal persistence but before task-state persistence.
-  const statePath = join(f.dir, 'state.json');
-  let state = JSON.parse(readFileSync(statePath, 'utf8')); state[0].changes = [];
-  writeFileSync(statePath, JSON.stringify(state)); await f.restart();
-  let task = (await invoke(f.service, 'get_task', { token: a.token })).structuredContent;
-  assert.equal(task.changes[0].operation, changed.structuredContent.operation);
-  assert.deepEqual(task.recoveryRequired, []);
-  const journal = join(f.dir, 'recovery', 'a', changed.structuredContent.operation + '.json');
-  writeFileSync(journal, JSON.stringify({ ...changed.structuredContent, state: 'prepared' }));
-  state = JSON.parse(readFileSync(statePath, 'utf8')); state[0].changes = [];
-  writeFileSync(statePath, JSON.stringify(state)); await f.restart();
-  task = (await invoke(f.service, 'get_task', { token: a.token })).structuredContent;
-  assert.equal(task.recoveryRequired.length, 1);
-  assert.equal((await f.admin('wait')).recoveryRequired[0].id, 'a');
-  assert.equal((await invoke(f.service, 'read_file', { token: a.token, path: 'a.txt' })).structuredContent.text, 'applied');
-  assert.equal((await invoke(f.service, 'write_file', { token: a.token, path: 'b.txt', text: 'retry', expectedSha256: null })).isError, true);
-  assert.equal((await invoke(f.service, 'submit_result', { token: a.token, status: 'completed', summary: 'done', result: 'done' })).isError, true);
-  assert.equal(readFileSync(join(root, 'a.txt'), 'utf8'), 'applied');
-  await f.admin('cancel', { id: 'a' });
-  assert.deepEqual(await f.admin('wait'), { events: [], backupDue: [] });
 }));

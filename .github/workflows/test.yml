@@ -32,5 +32,7 @@ jobs:
           package-manager-cache: false
       # Node discovers *.test.mjs itself, without shell-dependent glob expansion.
       # These tests use temporary files and local HTTP; no ChatGPT login is needed.
+      - name: Install terminal dependency
+        run: npm ci --prefix skills/webgpt
       - name: Run tests
         run: node --test --test-reporter=tap
