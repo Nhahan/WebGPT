@@ -38,7 +38,13 @@ webgpt p Research this topic and summarize the findings.
 
 ### Use ChatGPT yourself — `open`
 
-Tell Codex:
+Open the current project:
+
+```text
+webgpt open
+```
+
+Or specify another project:
 
 ```text
 webgpt open /path/to/project
