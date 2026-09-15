@@ -27,6 +27,7 @@ export class Terminals {
     const args = cmdShell ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command];
     const id = randomUUID();
     const session = {owner, output:'', exit_code:null, signal:null, done:false, listeners:new Set()};
+    session.finished = new Promise(resolve => {session.finish = resolve;});
     const notify = () => { for (const f of [...session.listeners]) f(); };
     if (tty) {
       const child = pty.spawn(shell, cmdShell ? args.join(' ') : args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30});
@@ -37,7 +38,7 @@ export class Terminals {
         else child.kill();
       };
       child.onData(text => {session.output += text; notify();});
-      child.onExit(({exitCode, signal}) => {session.done=true; session.exit_code=exitCode; session.signal=signal ?? null; notify();});
+      child.onExit(({exitCode, signal}) => {session.done=true; session.exit_code=exitCode; session.signal=signal ?? null; session.finish(); notify();});
     } else {
       const child = spawn(shell, args, {cwd, env:process.env, windowsVerbatimArguments:cmdShell, detached:process.platform !== 'win32', stdio:'pipe'});
       session.write = text => child.stdin.write(text);
@@ -56,7 +57,7 @@ export class Terminals {
       }
       child.stdin.on('error', () => {});
       child.on('error', error => {session.output += error.message;});
-      child.on('close', (code, signal) => {session.done=true; session.exit_code=code; session.signal=signal; notify();});
+      child.on('close', (code, signal) => {session.done=true; session.exit_code=code; session.signal=signal; session.finish(); notify();});
     }
     this.sessions.set(id, session);
     return this.read(owner, {session_id:id, yield_ms});
@@ -82,10 +83,12 @@ export class Terminals {
     return result;
   }
 
-  stop(owner) {
+  async stop(owner) {
+    const closing=[];
     for (const [id, s] of this.sessions) if (owner === undefined || s.owner === owner) {
-      if (!s.done) s.kill('SIGKILL');
-      this.sessions.delete(id);
+      if (!s.done && !s.stopping) {s.stopping=true; s.kill('SIGKILL');}
+      closing.push(s.finished.then(()=>this.sessions.delete(id)));
     }
+    await Promise.all(closing);
   }
 }

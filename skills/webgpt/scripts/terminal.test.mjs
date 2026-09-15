@@ -21,7 +21,7 @@ async function fixture(run) {
   const dir=mkdtempSync(join(tmpdir(),'webgpt-terminal-'));
   const terminals=new Terminals();
   try {await run(terminals,dir,terminalGrant({cwd:dir}));}
-  finally {terminals.stop();rmSync(dir,{recursive:true,force:true});}
+  finally {await terminals.stop();rmSync(dir,{recursive:true,force:true});}
 }
 test('shell directly creates, reads, edits and deletes files; cwd supports spaces and Unicode',()=>fixture(async(t,dir)=>{
   const cwd=join(dir,'한글 project');mkdirSync(cwd);

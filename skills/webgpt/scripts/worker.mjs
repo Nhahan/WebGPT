@@ -67,7 +67,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
     const artifact=resolve(dir,t.id+'.result.txt');
     writeFileSync(artifact,args.result,{mode:0o600});
     Object.assign(t,{status:args.status,summary:args.summary,artifact,sha256:sha,nextCheck:null});
-    terminals.stop(t.id);
+    await terminals.stop(t.id);
     persist();wake();return {accepted:true,sha256:sha};
   };
   const mcp=createServer(async(req,res)=>{
@@ -106,7 +106,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
       const t=tasks.find(t=>t.id===a.id);if(!t)throw Error('unknown task');
       if(req.url==='/ack'){if(t.status==='running')throw Error('not complete');t.collected=true;revoke(t);}
       else if(req.url==='/checked'){if(t.status==='running')t.nextCheck=now()+backupMs;}
-      else if(req.url==='/cancel'){if(t.status==='running'){terminals.stop(t.id);t.status='cancelled';t.summary='Cancelled by supervisor';t.nextCheck=null;t.collected=true;revoke(t);}}
+      else if(req.url==='/cancel'){if(t.status==='running'){t.status='cancelled';t.summary='Cancelled by supervisor';t.nextCheck=null;t.collected=true;revoke(t);await terminals.stop(t.id);}}
       else return json(res,404,{});
       persist();wake();json(res,200,{ok:true});
     }catch(e){json(res,400,{error:e.message});}
@@ -115,7 +115,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const listen=(s,p)=>new Promise((yes,no)=>{s.once('error',no);s.listen(p,'127.0.0.1',yes);});
   try{await listen(mcp,port);await listen(control,controlPort);}catch(e){mcp.close();control.close();throw e;}
   let closed=false;
-  return {mcpPort:mcp.address().port,controlPort:control.address().port,key,close:async()=>{if(closed)return;closed=true;terminals.stop();wake();await Promise.all([mcp,control].map(s=>new Promise(r=>{s.closeAllConnections();s.close(r);})));release();}};
+  return {mcpPort:mcp.address().port,controlPort:control.address().port,key,close:async()=>{if(closed)return;closed=true;wake();await Promise.all([mcp,control].map(s=>new Promise(r=>{s.closeAllConnections();s.close(r);})));await terminals.stop();release();}};
   }catch(e){release();throw e;}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
