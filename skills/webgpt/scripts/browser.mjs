@@ -25,7 +25,8 @@ export async function sendOnce(tab, prompt, mode = 'xh') {
   await tab.click(composer);
   await tab.typeText(prompt);
   await tab.pressKey('Return');
-  const after = await observe(tab);
+  let after = await observe(tab);
+  if (!after.includes(prompt)) after = await observe(tab); // One transition read, never resend.
   return { status: after.includes(prompt) ? 'submitted' : 'submission_unconfirmed', url: location(after), tabId: tab.id };
 }
 
@@ -33,7 +34,14 @@ export async function sendOnce(tab, prompt, mode = 'xh') {
 export async function deleteAndClose(tab, cua, browserId, expectedUrl, authorized = false) {
   if (!authorized) return { status: 'authorization_required' };
   let state = await observe(tab);
-  if (!/^https:\/\/chatgpt\.com\/c\/.+/.test(expectedUrl) || location(state) !== expectedUrl) return { status: 'target_changed' };
+  if (!/^https:\/\/chatgpt\.com\/c\/.+/.test(expectedUrl)) return { status: 'target_changed' };
+  if (location(state) !== expectedUrl) {
+    // ChatGPT replaces a WEB: draft URL with its saved URL; the observed menu ID links them.
+    const draft = expectedUrl.match(/\/c\/(WEB:[a-zA-Z0-9-]+)$/)?.[1];
+    const sameDraft = draft && lines(state).some(line => line.includes('ID: conversation-options-' + draft) && line.split('ID: conversation-options-')[1].split(',')[0] === draft);
+    if (!sameDraft || !/^https:\/\/chatgpt\.com\/c\/[a-f0-9-]+$/.test(location(state) ?? '')) return { status: 'target_changed' };
+    expectedUrl = location(state);
+  }
   const chatTitle = title(state);
   const menu = one(state, line => /^\d+ button/.test(line) && /ID: conversation-options-/.test(line));
   if (menu === null) return { status: 'needs_menu' };

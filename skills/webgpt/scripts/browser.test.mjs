@@ -22,3 +22,13 @@ test('cleanup batches exact chat deletion and closure, but stops on authorizatio
   assert.equal((await deleteAndClose(wrongDialog,cua,'1',url,true)).status,'needs_dialog_verification');
   assert.deepEqual(wrongDialog.actions,[['click',5],['click',6]]);
 });
+test('delayed submission is observed once without resending; draft URL resolves only via its matching menu',async()=>{
+  const draft='https://chatgpt.com/c/WEB:abc-123', saved='https://chatgpt.com/c/abc-456';
+  const t=tab([home,header(draft),header(draft)+'Hello',header(saved)+'5 button Description: More, ID: conversation-options-WEB:abc-123',header(saved)+'6 삭제',header(saved)+'7 container 채팅을 삭제하시겠습니까?\n8 text Owned task\n9 button 삭제',header('https://chatgpt.com/')]);
+  assert.equal((await sendOnce(t,'Hello')).status,'submitted');
+  assert.equal(t.actions.filter(a=>a[0]==='key').length,1);
+  assert.equal((await deleteAndClose(t,{listTabs:async()=>[]},'1',draft,true)).status,'deleted_and_closed');
+  const other=tab([header(saved)+'5 button Description: More, ID: conversation-options-WEB:other']);
+  assert.equal((await deleteAndClose(other,{listTabs:async()=>[]},'1',draft,true)).status,'target_changed');
+  assert.deepEqual(other.actions,[]);
+});
