@@ -10,7 +10,11 @@ import { request } from './client.mjs';
 const nodeCommand = code => `"${process.execPath}" -e "${code.replaceAll('"','\\"')}"`;
 async function finish(terminals, owner, result) {
   let output=result.output;
-  while(result.running) {result=await terminals.read(owner,{session_id:result.session_id});output+=result.output;}
+  const deadline=Date.now()+15000;
+  while(result.running) {
+    assert.ok(Date.now()<deadline,`Test command did not finish. Output: ${JSON.stringify(output)}`);
+    result=await terminals.read(owner,{session_id:result.session_id});output+=result.output;
+  }
   return {...result,output};
 }
 async function fixture(run) {
