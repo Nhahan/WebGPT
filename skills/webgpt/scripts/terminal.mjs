@@ -16,6 +16,10 @@ export function terminalGrant(input) {
 export class Terminals {
   sessions = new Map();
 
+  isRunning(owner) {
+    return [...this.sessions.values()].some(s => s.owner === owner && !s.done);
+  }
+
   async execute(owner, grant, {command, cwd, shell, tty = false, yield_ms = 1000}) {
     if (!grant) throw Error('terminal access not granted');
     if (typeof command !== 'string') throw Error('command must be a string');

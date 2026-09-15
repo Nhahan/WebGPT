@@ -11,6 +11,13 @@ not enforced restrictions. Never silently upgrade a file-only grant to shell acc
 
 ## Assign
 
+For user-led `webgpt open`, use `node <skill>/scripts/client.mjs open /absolute/project` instead.
+It returns a reusable open-session token with no completion/backup workflow. Terminal calls renew
+its 24-hour idle lease; active commands prevent expiry. The worker checks expiry every minute and
+on incoming calls/startup, persists the last-use time, and revokes expired tokens without touching
+the user's chat or files. Read-only metadata queries do not renew the lease. `submit_result` is
+rejected for open sessions: the user receives replies directly in ChatGPT. Do not wait or collect.
+
 Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
 Registration generates the ID automatically. It needs no task document:
 send the actual assignment directly in the single ChatGPT message, together with the task token

@@ -16,7 +16,7 @@ export const tools = [
   {name:'read_input',description:'Read one explicitly supplied input by name; no arbitrary filesystem access.',inputSchema:schema({token:str,name:str}),annotations:{readOnlyHint:true,openWorldHint:false}},
   {name:'submit_result',description:'Save the task deliverable, evidence and limitations, and notify the supervisor. No file changes required. Terminal: stops backup checks. Retry identical submission safely. Do not delete the chat.',inputSchema:schema({token:str,status:{type:'string',enum:['completed','failed','cancelled']},summary:str,result:str}),annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}}
 ];
-export async function start({dir,port=43137,controlPort=43139,publicMcp=false,backupMs=1200000,now=Date.now}={}) {
+export async function start({dir,port=43137,controlPort=43139,publicMcp=false,backupMs=1200000,idleSweepMs=60000,now=Date.now}={}) {
   dir=resolve(dir); mkdirSync(dir,{recursive:true,mode:0o700});
   const lock=resolve(dir,'worker.lock');
   try{mkdirSync(lock,{mode:0o700});}catch(e){if(e.code==='EEXIST')throw Error('WebGPT data directory locked: '+lock+'; verify its owner before recovering a stale lock');throw e;}
@@ -43,7 +43,17 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const revoke=t=>{delete t.token;t.inputs={};t.instructions='';};
   for(const t of tasks) if(t.collected)revoke(t);
   if(tasks.length)persist();
+  const activeRequests=new Map();
+  const expireIdle=async()=>{
+    const expired=tasks.filter(t=>t.mode==='open'&&t.status==='running'&&now()-t.lastUsed>=86400000&&!activeRequests.has(t.id)&&!terminals.isRunning(t.id));
+    if(!expired.length)return;
+    for(const t of expired){t.status='expired';t.collected=true;t.nextCheck=null;revoke(t);}
+    persist();
+    await Promise.all(expired.map(t=>terminals.stop(t.id)));
+  };
+  await expireIdle();
   const view=(selected=tasks)=>{
+    selected=selected.filter(t=>t.mode!=='open');
     const recoveryRequired=selected.filter(t=>t.status==='running'&&t.recoveryRequired?.length).map(t=>({id:t.id,journals:t.recoveryRequired}));
     return {events:selected.filter(t=>t.status!=='running'&&!t.collected).map(t=>({id:t.id,status:t.status,summary:t.summary,artifact:t.artifact,sha256:t.sha256})),backupDue:selected.filter(t=>t.status==='running'&&now()>=t.nextCheck).map(t=>t.id),...(recoveryRequired.length?{recoveryRequired}:{})};
   };
@@ -51,15 +61,22 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const json=(res,status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));};
   const body=async req=>{const chunks=[];let bytes=0;for await(const c of req){bytes+=c.length;if(bytes>2*1024*1024)throw Error('request too large');chunks.push(c);}return JSON.parse(Buffer.concat(chunks).toString());};
   const call=async(name,args)=>{
+    await expireIdle();
     const t=typeof args.token==='string'&&tasks.find(t=>t.token&&t.token===args.token);if(!t)throw Error('unknown task token');
-    if(name==='get_task')return {id:t.id,instructions:t.instructions,inputs:Object.keys(t.inputs),status:t.status,terminal:t.terminal??null};
+    if(name==='get_task')return {id:t.id,instructions:t.instructions,inputs:Object.keys(t.inputs),status:t.status,terminal:t.terminal??null,...(t.mode==='open'?{mode:'open',idleExpiresAt:t.lastUsed+86400000}: {})};
     if(name==='read_input'){if(!Object.hasOwn(t.inputs,args.name))throw Error('unknown input');return {name:args.name,text:t.inputs[args.name]};}
     if(name==='exec_command'||name==='write_stdin') {
       if(t.status!=='running')throw Error('task is terminal; terminal access closed');
       if(!t.terminal)throw Error('terminal access not granted');
-      return name==='exec_command' ? terminals.execute(t.id,t.terminal,args) : terminals.read(t.id,args);
+      activeRequests.set(t.id,(activeRequests.get(t.id)??0)+1);
+      try {
+        const out=await (name==='exec_command' ? terminals.execute(t.id,t.terminal,args) : terminals.read(t.id,args));
+        if(t.mode==='open'&&t.status==='running'){t.lastUsed=now();persist();}
+        return out;
+      } finally {const left=activeRequests.get(t.id)-1;if(left)activeRequests.set(t.id,left);else activeRequests.delete(t.id);}
     }
     if(name!=='submit_result')throw Error('unknown tool');
+    if(t.mode==='open')throw Error('User-controlled open session: reply in chat; do not submit or close the session');
     if(!['completed','failed','cancelled'].includes(args.status)||typeof args.result!=='string'||typeof args.summary!=='string'||args.summary.length>2048||Buffer.byteLength(args.result)>1024*1024)throw Error('invalid result');
     if(args.status==='completed'&&t.recoveryRequired?.length)throw Error('supervisor recovery required; preserve partial output with failed status');
     const sha=createHash('sha256').update(args.result).digest('hex');
@@ -80,7 +97,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
     if(!m||typeof m!=='object'||Array.isArray(m))return json(res,400,{error:'invalid request'});
     if(m.method==='notifications/initialized'){res.writeHead(202);return res.end();}
     let result;
-    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion??'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'webgpt-worker',version:'2.0.0'},instructions:'Follow the assignment in the chat; get_task is optional when registered context is needed. Use the terminal to perform authorized project work directly. Terminal access is the local OS user’s access, not a project sandbox; no separate file tools or read-only enforcement. Preserve unrelated work. Submit the result with evidence and limitations when finished; this stops your remaining terminal sessions and backup checks. Do not run reporting timers or delete chats/tabs: the worker handles deadlines and Codex handles cleanup. Never claim unexecuted checks passed.'};
+    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion??'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'webgpt-worker',version:'2.0.0'},instructions:'Follow the assignment in the chat; get_task is optional when registered context is needed. Use the terminal to perform authorized project work directly. Terminal access is the local OS user’s access, not a project sandbox; no separate file tools or read-only enforcement. Preserve unrelated work. For delegated tasks, submit the result with evidence and limitations when finished; this stops remaining terminal sessions and backup checks. For user-led open sessions, reply in chat and do not submit_result; terminal use renews the 24-hour idle lease. Do not run reporting timers or delete chats/tabs: the worker handles deadlines and Codex handles cleanup. Never claim unexecuted checks passed.'};
     else if(m.method==='tools/list')result={tools};
     else if(m.method==='tools/call'){try{const out=await call(m.params.name,m.params.arguments??{});result={content:[{type:'text',text:JSON.stringify(out)}],structuredContent:out,isError:false};}catch(e){result={content:[{type:'text',text:e.message}],isError:true};}}
     else return json(res,200,{jsonrpc:'2.0',id:m.id??null,error:{code:-32601,message:'method not found'}});
@@ -93,7 +110,8 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
       if(req.method==='GET'&&url.pathname==='/wait'){
         const ids=url.searchParams.getAll('id');
         if(ids.some(id=>!tasks.some(t=>t.id===id)))throw Error('unknown task');
-        const selected=ids.length?tasks.filter(t=>ids.includes(t.id)):tasks;
+        if(ids.some(id=>tasks.some(t=>t.id===id&&t.mode==='open')))throw Error('open sessions are user-controlled; do not wait or collect');
+        const selected=(ids.length?tasks.filter(t=>ids.includes(t.id)):tasks).filter(t=>t.mode!=='open');
         const snapshot=()=>({...view(selected),...(ids.length?{settled:!selected.some(t=>t.status==='running')}:{})});
         const ready=v=>v.events.length||v.backupDue.length||v.recoveryRequired?.length||!selected.some(t=>t.status==='running');
         const v=snapshot();if(ready(v))return json(res,200,v);
@@ -106,10 +124,13 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
       if(req.url==='/register'){
         if(!/^[a-zA-Z0-9_-]{1,80}$/.test(a.id)||tasks.some(t=>t.id===a.id)||typeof a.instructions!=='string'||!a.inputs||typeof a.inputs!=='object'||Array.isArray(a.inputs)||Object.values(a.inputs).some(v=>typeof v!=='string'))throw Error('invalid task');
         if(a.workspace)throw Error('workspace grants were removed; explicitly authorize terminal:{cwd} instead');
+        if(a.mode!==undefined&&a.mode!=='open')throw Error('invalid mode');
         const terminal=terminalGrant(a.terminal);
-        const t={id:a.id,token:randomUUID(),instructions:a.instructions,inputs:a.inputs,terminal,status:'running',nextCheck:now()+backupMs,collected:false};tasks.push(t);persist();wake();return json(res,200,{id:t.id,token:t.token});
+        if(a.mode==='open'&&!terminal)throw Error('open requires a project directory');
+        const t={id:a.id,token:randomUUID(),instructions:a.instructions,inputs:a.inputs,terminal,status:'running',nextCheck:a.mode==='open'?null:now()+backupMs,collected:false,...(a.mode==='open'?{mode:'open',lastUsed:now()}: {})};tasks.push(t);persist();wake();return json(res,200,{id:t.id,token:t.token,...(t.mode==='open'?{mode:'open',idleExpiresAt:t.lastUsed+86400000}: {})});
       }
       const t=tasks.find(t=>t.id===a.id);if(!t)throw Error('unknown task');
+      if(t.mode==='open'&&req.url!=='/cancel')throw Error('open sessions are user-controlled');
       if(req.url==='/ack'){if(t.status==='running')throw Error('not complete');t.collected=true;revoke(t);}
       else if(req.url==='/checked'){if(t.status==='running')t.nextCheck=now()+backupMs;}
       else if(req.url==='/cancel'){if(t.status==='running'){t.status='cancelled';t.summary='Cancelled by supervisor';t.nextCheck=null;t.collected=true;revoke(t);await terminals.stop(t.id);}}
@@ -121,7 +142,8 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const listen=(s,p)=>new Promise((yes,no)=>{s.once('error',no);s.listen(p,'127.0.0.1',yes);});
   try{await listen(mcp,port);await listen(control,controlPort);}catch(e){mcp.close();control.close();throw e;}
   let closed=false;
-  return {mcpPort:mcp.address().port,controlPort:control.address().port,key,close:async()=>{if(closed)return;closed=true;wake();await Promise.all([mcp,control].map(s=>new Promise(r=>{s.closeAllConnections();s.close(r);})));await terminals.stop();release();}};
+  const idleTimer=setInterval(()=>expireIdle().catch(error=>console.error('WebGPT idle cleanup:',error.message)),idleSweepMs);idleTimer.unref();
+  return {mcpPort:mcp.address().port,controlPort:control.address().port,key,expireIdle,close:async()=>{if(closed)return;closed=true;clearInterval(idleTimer);wake();await Promise.all([mcp,control].map(s=>new Promise(r=>{s.closeAllConnections();s.close(r);})));await terminals.stop();release();}};
   }catch(e){release();throw e;}
 }
 if(process.argv[1]&&process.argv[1]!=='-'&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){

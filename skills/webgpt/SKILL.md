@@ -1,6 +1,6 @@
 ---
 name: webgpt
-description: Use when the user requests WebGPT, including xh/xhigh or p/pro. Delegate tasks to the user's signed-in ChatGPT on the web, collect and verify results, and clean up task chats.
+description: Use for WebGPT requests, including xh/xhigh, p/pro, or open. Delegate work to signed-in Web ChatGPT or open a user-controlled project terminal chat.
 ---
 
 # WebGPT
@@ -8,6 +8,21 @@ description: Use when the user requests WebGPT, including xh/xhigh or p/pro. Del
 Delegate to signed-in Web ChatGPT through documented, authorized browser controls.
 Read [setup.md](references/setup.md) only for an installation request or an observed missing
 capability. Normal delegation reads workspace.md, not setup.md or the worker source.
+
+## Open — user-controlled mode
+
+For `webgpt open [project path]`, use the named project or current directory. This mode overrides
+all delegation monitoring and cleanup below. Read workspace.md for the existing connection.
+Run `node <skill>/scripts/client.mjs open /absolute/project`, then open a new tab in the user's
+signed-in browser. Preserve its current model unless the user specifies one.
+Send one short connection message with the returned token and project path: this is a user-led
+terminal session; follow subsequent user messages, reply in chat, and do not submit_result.
+Do not assign work or run a probe. Confirm message submission, mark the tab as a deliverable using
+the browser's supported keep-open mechanism, and hand it to the user. Stop there: no wait,
+collection, backup checks, chat deletion or tab closure. The user may send unlimited messages.
+The worker automatically revokes access after 24 hours without terminal use, checked within one
+minute; each successful terminal call renews it, and running commands are protected. Expiry never
+deletes chats, tabs or project files. The persistent worker, not Codex, handles expiry.
 
 The existing local Node.js worker, not an LLM, handles saved results, completion notification and
 backup deadlines. Registration starts the deadline; completion/cancellation clears it automatically.

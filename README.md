@@ -32,4 +32,10 @@ Use webgpt xh as subagents to develop this project's planned features in paralle
 webgpt p Research this topic and summarize the findings.
 ```
 
+```text
+webgpt open /path/to/project
+```
+
+Open a terminal-connected chat you control. Access expires after 24 hours of inactivity.
+
 `xh` = Extra High · `p` = Pro.
