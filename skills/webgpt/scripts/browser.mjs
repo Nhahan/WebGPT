@@ -45,7 +45,8 @@ export async function deleteAndClose(tab, cua, browserId, expectedUrl, authorize
   state = await observe(tab);
   // A transition may expose only the page header; one fresh read obtains the dialog.
   if (!/채팅을 삭제|Delete chat/i.test(state)) state = await observe(tab);
-  if (location(state) !== expectedUrl || !chatTitle || !state.includes(chatTitle) || !/채팅을 삭제|Delete chat/i.test(state)) return { status: 'needs_dialog_verification' };
+  const namedInDialog = chatTitle && lines(state).some(line => line.replace(/^\d+ text /, '') === chatTitle);
+  if (location(state) !== expectedUrl || !namedInDialog || !/채팅을 삭제|Delete chat/i.test(state)) return { status: 'needs_dialog_verification' };
   const confirm = one(state, line => /^\d+ button (?:삭제|Delete)$/.test(line));
   if (confirm === null) return { status: 'needs_confirmation_control' };
   await tab.click(confirm);

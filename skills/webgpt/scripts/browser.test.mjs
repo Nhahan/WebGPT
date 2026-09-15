@@ -18,4 +18,7 @@ test('cleanup batches exact chat deletion and closure, but stops on authorizatio
   assert.equal((await deleteAndClose(t,cua,'1',url)).status,'authorization_required');assert.deepEqual(t.actions,[]);
   assert.equal((await deleteAndClose(t,cua,'1',url,true)).status,'deleted_and_closed');assert.deepEqual(t.actions,[['click',5],['click',6],['click',9],['close']]);
   const changed=tab([header('https://chatgpt.com/c/other')]);assert.equal((await deleteAndClose(changed,cua,'1',url,true)).status,'target_changed');assert.deepEqual(changed.actions,[]);
+  const wrongDialog=tab([states[0],states[1],header(url)+'7 container 채팅을 삭제하시겠습니까?\n8 text Other task\n9 button 삭제']);
+  assert.equal((await deleteAndClose(wrongDialog,cua,'1',url,true)).status,'needs_dialog_verification');
+  assert.deepEqual(wrongDialog.actions,[['click',5],['click',6]]);
 });
