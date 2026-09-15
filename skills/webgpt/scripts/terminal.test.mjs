@@ -41,7 +41,7 @@ test('all output is returned, failures carry exit status, commands persist betwe
 test('PTY accepts interactive input and supports interrupt',()=>fixture(async(t,dir,grant)=>{
   const s=await t.execute('a',grant,{command:nodeCommand("console.log(process.stdin.isTTY);process.stdin.once('data',x=>{console.log('received:'+x);process.exit(0)})"),tty:true});
   let output=s.output;
-  const next=await t.read('a',{session_id:s.session_id,input:'hello\n'});
+  const next=await t.read('a',{session_id:s.session_id,input:'hello\r'});
   output+=(await finish(t,'a',next)).output;
   assert.match(output,/true/);assert.match(output,/received:hello/);
   const running=await t.execute('a',grant,{command:nodeCommand('setInterval(()=>{},1000)'),tty:true,yield_ms:0});

@@ -39,7 +39,11 @@ export class Terminals {
       session.write = text => child.stdin.write(text);
       session.kill = signal => {
         if (!child.pid) return;
-        if (process.platform === 'win32') child.kill(signal);
+        // Killing cmd.exe alone leaves its command alive and its pipes open on Windows.
+        if (process.platform === 'win32') {
+          const killer=spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});
+          killer.on('error',()=>child.kill(signal));
+        }
         else { try { process.kill(-child.pid, signal); } catch(e) { if(e.code !== 'ESRCH') throw e; } }
       };
       for (const stream of [child.stdout, child.stderr]) {
