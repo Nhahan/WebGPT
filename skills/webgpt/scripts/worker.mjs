@@ -16,6 +16,10 @@ export const tools = [
   {name:'read_input',description:'Read one explicitly supplied input by name; no arbitrary filesystem access.',inputSchema:schema({token:str,name:str}),annotations:{readOnlyHint:true,openWorldHint:false}},
   {name:'submit_result',description:'Save the task deliverable, evidence and limitations, and notify the supervisor. No file changes required. Terminal: stops backup checks. Retry identical submission safely. Do not delete the chat.',inputSchema:schema({token:str,status:{type:'string',enum:['completed','failed','cancelled']},summary:str,result:str}),annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}}
 ];
+const openTools = tools.slice(0,2).map(tool=>{
+  const {token,...properties}=tool.inputSchema.properties;
+  return {...tool,inputSchema:{...tool.inputSchema,properties,required:tool.inputSchema.required.filter(key=>key!=='token')}};
+});
 export async function start({dir,port=43137,controlPort=43139,publicMcp=false,backupMs=1200000,idleSweepMs=60000,now=Date.now}={}) {
   dir=resolve(dir); mkdirSync(dir,{recursive:true,mode:0o700});
   const lock=resolve(dir,'worker.lock');
@@ -40,7 +44,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const terminals=new Terminals();
   const waiters=new Set();
   const persist=()=>{writeFileSync(statePath+'.tmp',JSON.stringify(tasks),{mode:0o600});renameSync(statePath+'.tmp',statePath);};
-  const revoke=t=>{delete t.token;t.inputs={};t.instructions='';};
+  const revoke=t=>{delete t.token;delete t.openKey;t.inputs={};t.instructions='';};
   for(const t of tasks) if(t.collected)revoke(t);
   if(tasks.length)persist();
   const activeRequests=new Map();
@@ -90,7 +94,10 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const mcp=createServer(async(req,res)=>{
     if(req.headers.origin)return json(res,403,{});
     if(req.method==='GET'&&req.url==='/health')return json(res,200,{ok:true,name:'WebGPT Worker'});
-    const actual=Buffer.from(req.url??''),expected=Buffer.from(mcpPath);
+    await expireIdle();
+    const openToken=(req.url??'').match(/^\/open\/([a-f0-9]{64})$/)?.[1];
+    const openTask=openToken&&tasks.find(t=>t.mode==='open'&&t.status==='running'&&t.openKey===openToken&&t.token);
+    const actual=Buffer.from(req.url??''),expected=Buffer.from(openTask?'/open/'+openTask.openKey:mcpPath);
     if(actual.length!==expected.length||!timingSafeEqual(actual,expected))return json(res,404,{});
     if(req.method!=='POST'){res.setHeader('allow','POST');return json(res,405,{});}
     let m;try{m=await body(req);}catch{return json(res,400,{error:'invalid request'});}
@@ -98,9 +105,12 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
     if(m.method==='notifications/initialized'){res.writeHead(202);return res.end();}
     let result;
     if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion??'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'webgpt-worker',version:'2.0.0'},instructions:'Follow the assignment in the chat; get_task is optional when registered context is needed. Use the terminal to perform authorized project work directly. Terminal access is the local OS user’s access, not a project sandbox; no separate file tools or read-only enforcement. Preserve unrelated work. For delegated tasks, submit the result with evidence and limitations when finished; this stops remaining terminal sessions and backup checks. For user-led open sessions, reply in chat and do not submit_result; terminal use renews the 24-hour idle lease. Do not run reporting timers or delete chats/tabs: the worker handles deadlines and Codex handles cleanup. Never claim unexecuted checks passed.'};
-    else if(m.method==='tools/list')result={tools};
-    else if(m.method==='tools/call'){try{const out=await call(m.params.name,m.params.arguments??{});result={content:[{type:'text',text:JSON.stringify(out)}],structuredContent:out,isError:false};}catch(e){result={content:[{type:'text',text:e.message}],isError:true};}}
+    else if(m.method==='tools/list')result={tools:openTask?openTools:tools};
+    else if(m.method==='tools/call'){try{
+      if(openTask&&(!openTools.some(tool=>tool.name===m.params?.name)||Object.hasOwn(m.params?.arguments??{},'token')))throw Error('unknown tool or invalid arguments');
+      const out=await call(m.params.name,openTask?{...m.params.arguments,token:openTask.token}:m.params.arguments??{});result={content:[{type:'text',text:JSON.stringify(out)}],structuredContent:out,isError:false};}catch(e){result={content:[{type:'text',text:e.message}],isError:true};}}
     else return json(res,200,{jsonrpc:'2.0',id:m.id??null,error:{code:-32601,message:'method not found'}});
+    if(openTask&&m.method==='initialize')result.instructions=`Use the terminal for the user's requests. Default project directory: ${JSON.stringify(openTask.terminal.cwd)}. Access is the local OS user's access, not a sandbox. Preserve unrelated work and report results in chat.`;
     json(res,200,{jsonrpc:'2.0',id:m.id??null,result});
   });
   const control=createServer(async(req,res)=>{
@@ -127,7 +137,7 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
         if(a.mode!==undefined&&a.mode!=='open')throw Error('invalid mode');
         const terminal=terminalGrant(a.terminal);
         if(a.mode==='open'&&!terminal)throw Error('open requires a project directory');
-        const t={id:a.id,token:randomUUID(),instructions:a.instructions,inputs:a.inputs,terminal,status:'running',nextCheck:a.mode==='open'?null:now()+backupMs,collected:false,...(a.mode==='open'?{mode:'open',lastUsed:now()}: {})};tasks.push(t);persist();wake();return json(res,200,{id:t.id,token:t.token,...(t.mode==='open'?{mode:'open',idleExpiresAt:t.lastUsed+86400000}: {})});
+        const t={id:a.id,token:randomUUID(),instructions:a.instructions,inputs:a.inputs,terminal,status:'running',nextCheck:a.mode==='open'?null:now()+backupMs,collected:false,...(a.mode==='open'?{mode:'open',openKey:randomBytes(32).toString('hex'),lastUsed:now()}: {})};tasks.push(t);persist();wake();return json(res,200,{id:t.id,token:t.token,...(t.mode==='open'?{mode:'open',connectionPath:'/open/'+t.openKey,idleExpiresAt:t.lastUsed+86400000}: {})});
       }
       const t=tasks.find(t=>t.id===a.id);if(!t)throw Error('unknown task');
       if(t.mode==='open'&&req.url!=='/cancel')throw Error('open sessions are user-controlled');

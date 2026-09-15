@@ -15,12 +15,17 @@ capability. Normal delegation reads workspace.md, not setup.md or the worker sou
 
 For `webgpt open [project path]`, use the named project or current directory. This mode overrides
 all delegation monitoring and cleanup below. Read workspace.md for the existing connection.
-Run `node <skill>/scripts/client.mjs open /absolute/project`, then open a new tab in the user's
-signed-in browser. Preserve its current model unless the user specifies one.
-Send one short connection message with the returned token and project path: this is a user-led
-terminal session; follow subsequent user messages, reply in chat, and do not submit_result.
-Do not assign work or run a probe. Confirm message submission, mark the tab as a deliverable using
-the browser's supported keep-open mechanism, and hand it to the user. Stop there: no wait,
+Run `node <skill>/scripts/client.mjs open /absolute/project`. Privately combine the returned
+`connectionPath` with the existing HTTPS forwarding origin and register a separate, uniquely named
+WebGPT Open connection through the documented plugin UI (setup.md's connection steps).
+Never replace the shared Worker connection or another open session's URL. This connection exposes
+only token-free terminal tools and binds the project on the server.
+Open a new tab in the signed-in browser and select that connection in the composer plugin menu.
+Preserve the current model unless specified. Do not type or send any message, task, token or probe;
+the user starts the conversation. Verify the selected connection and absence of sent messages,
+mark the tab as a deliverable using the browser's supported keep-open mechanism, and hand it over.
+If connection setup fails, cancel only this new session and report it; never substitute a bootstrap
+message or an unconnected tab. Stop after handoff: no wait,
 collection, backup checks, chat deletion or tab closure. The user may send unlimited messages.
 The worker automatically revokes access after 24 hours without terminal use, checked within one
 minute; each successful terminal call renews it, and running commands are protected. Expiry never

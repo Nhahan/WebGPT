@@ -1,11 +1,52 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,realpathSync,writeFileSync} from 'node:fs';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {start} from './worker.mjs';
 import {request} from './client.mjs';
 const day=86400000;
+test('open connection binds its project without prompt tokens and exposes only terminal tools',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'webgpt-open-route-'));let clock=1000;
+  let service=await start({dir,port:0,controlPort:0,publicMcp:true,now:()=>clock});
+  const admin=(a,p)=>request(a,p,{dataDir:dir,controlPort:service.controlPort});
+  const rpc=async(path,method,params={})=>{
+    const r=await fetch(`http://127.0.0.1:${service.mcpPort}${path}`,{method:'POST',body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+    return {status:r.status,...await r.json()};
+  };
+  try{
+    const configPath=join(dir,'config.json');
+    writeFileSync(configPath,JSON.stringify({dataDir:dir,mcpPort:service.mcpPort,controlPort:service.controlPort}));
+    const cli=JSON.parse((await promisify(execFile)(process.execPath,[fileURLToPath(new URL('./client.mjs',import.meta.url)),'open',dir],{env:{...process.env,WEBGPT_CONFIG:configPath,WEBGPT_DATA_DIR:dir}})).stdout);
+    assert.ok(cli.connectionPath.startsWith('/open/'));assert.equal(cli.token,undefined);
+    await admin('cancel',{id:cli.id});
+    const a=await admin('register',{mode:'open',terminal:{cwd:dir}});
+    const b=await admin('register',{mode:'open',terminal:{cwd:tmpdir()}});
+    const listed=(await rpc(a.connectionPath,'tools/list')).result.tools;
+    assert.deepEqual(listed.map(t=>t.name),['exec_command','write_stdin']);
+    assert.ok(listed.every(t=>!t.inputSchema.properties.token&&!t.inputSchema.required.includes('token')));
+    const init=(await rpc(a.connectionPath,'initialize')).result;
+    assert.ok(init.instructions.includes(dir));assert.ok(!init.instructions.includes('submit_result'));
+    const run=await rpc(a.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
+    assert.equal(run.result.isError,false);assert.ok(run.result.structuredContent.output.includes(dir));
+    const other=await rpc(b.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
+    assert.equal(other.result.isError,false);assert.equal(other.result.structuredContent.output.trim(),realpathSync(tmpdir()));
+    for(const name of ['submit_result','get_task','read_input'])assert.equal((await rpc(a.connectionPath,'tools/call',{name,arguments:{}})).result.isError,true);
+    assert.equal((await rpc(a.connectionPath,'tools/call',{name:'exec_command',arguments:{token:b.token,command:'echo wrong'}})).result.isError,true);
+    assert.equal((await rpc('/open/wrong','tools/list')).status,404);
+    assert.equal((await rpc('/mcp','tools/list')).status,404);
+    const general='/mcp/'+readFileSync(join(dir,'mcp-path.key'),'utf8');
+    assert.equal((await rpc(general,'tools/list')).result.tools.length,5);
+    await service.close();service=await start({dir,port:0,controlPort:0,publicMcp:true,now:()=>clock});
+    assert.equal((await rpc(a.connectionPath,'tools/list')).status,200);
+    await admin('cancel',{id:a.id});assert.equal((await rpc(a.connectionPath,'tools/list')).status,404);
+    assert.equal((await rpc(b.connectionPath,'tools/list')).status,200);
+    clock+=day;assert.equal((await rpc(b.connectionPath,'tools/list')).status,404);
+  }finally{await service.close();rmSync(dir,{recursive:true});}
+});
 test('open sessions renew on terminal use, skip supervision, protect running commands and expire autonomously',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'webgpt-open-'));let clock=1000;
   let service=await start({dir,port:0,controlPort:0,now:()=>clock,idleSweepMs:10});

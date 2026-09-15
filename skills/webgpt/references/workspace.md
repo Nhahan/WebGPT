@@ -12,11 +12,18 @@ not enforced restrictions. Never silently upgrade a file-only grant to shell acc
 ## Assign
 
 For user-led `webgpt open`, use `node <skill>/scripts/client.mjs open /absolute/project` instead.
-It returns a reusable open-session token with no completion/backup workflow. Terminal calls renew
+It returns a private `connectionPath` with no completion/backup workflow. Register the existing
+HTTPS origin plus this path as a separate ChatGPT plugin connection, then select it in a blank chat.
+The URL is the session capability: keep it out of chat messages, screenshots and reports. No token
+argument or bootstrap message is needed. Only `exec_command` and `write_stdin` are exposed;
+the route binds the project and rejects other tools or explicit token arguments. Never repoint an
+existing connection to another session: old chats must not gain access to the new project.
+Terminal calls renew
 its 24-hour idle lease; active commands prevent expiry. The worker checks expiry every minute and
 on incoming calls/startup, persists the last-use time, and revokes expired tokens without touching
-the user's chat or files. Read-only metadata queries do not renew the lease. `submit_result` is
-rejected for open sessions: the user receives replies directly in ChatGPT. Do not wait or collect.
+the user's chat or files. Tool discovery does not renew the lease. Expired URLs return 404;
+the inactive plugin entry may remain in ChatGPT, but grants no access. Replies stay in ChatGPT.
+Do not wait or collect. Existing token-based open sessions remain usable until they expire.
 
 Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
 Registration generates the ID automatically. It needs no task document:

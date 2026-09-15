@@ -78,6 +78,11 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
     } else if (action === 'open') {
       if (args.length !== 1) throw Error('usage: client.mjs open <project-directory>');
       result = await request('register', { mode: 'open', terminal: { cwd: args[0] } });
+      if (!result.connectionPath) {
+        await request('cancel', { id: result.id });
+        throw Error('Running worker needs an update for message-free open; preserve active sessions and restart when idle');
+      }
+      delete result.token; // Bind through the private connector URL, never a chat message.
     } else if (action === 'register' && args[0] === '--cwd') {
       if (args.length !== 2) throw Error('usage: client.mjs register --cwd <project-directory>');
       result = await request('register', { terminal: { cwd: args[1] } });
