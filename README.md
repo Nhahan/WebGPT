@@ -22,7 +22,9 @@ Ask only for sign-in or another action that genuinely requires me; continue afte
 
 ## Use
 
-Tell Codex:
+### Delegate with Codex — `xh` / `p`
+
+Codex sends the task to WebGPT and collects the result. Tell Codex:
 
 ```text
 Use webgpt xh as subagents to develop this project's planned features in parallel.
@@ -32,6 +34,12 @@ Use webgpt xh as subagents to develop this project's planned features in paralle
 webgpt p Research this topic and summarize the findings.
 ```
 
+`xh` = Extra High · `p` = Pro.
+
+### Use ChatGPT yourself — `open`
+
+Tell Codex:
+
 ```text
 webgpt open /path/to/project
 ```
@@ -39,5 +47,3 @@ webgpt open /path/to/project
 Open a blank ChatGPT tab connected to your project's terminal. You start the conversation,
 run the work and close the chat; Codex only sets up the connection.
 Terminal access expires after 24 hours without use; each use resets the timer.
-
-`xh` = Extra High · `p` = Pro.
