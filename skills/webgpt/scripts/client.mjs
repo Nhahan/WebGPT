@@ -2,6 +2,7 @@ import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 // Shared by the worker and controller client; never store configuration in the skill.
 export function configuration(env = process.env) {
@@ -28,6 +29,7 @@ export async function request(action, payload, config = configuration()) {
   const read = ['wait', 'status'].includes(action);
   if (!read && !['register', 'ack', 'checked', 'cancel'].includes(action)) throw Error('unknown controller action');
   if (read ? payload !== undefined && !(action === 'wait' && Array.isArray(payload?.ids) && payload.ids.length && payload.ids.every(id => typeof id === 'string')) : !payload || typeof payload !== 'object') throw Error('invalid controller payload');
+  if (action === 'register') payload = { id: randomUUID(), inputs: {}, ...payload };
   const key = readFileSync(join(config.dataDir, 'controller.key'), 'utf8');
   const query = action === 'wait' && payload ? '?' + new URLSearchParams(payload.ids.map(id => ['id', id])) : '';
   const response = await fetch('http://127.0.0.1:' + config.controlPort + '/' + action + query, {
@@ -51,11 +53,19 @@ export async function waitForTasks(ids, config = configuration(), read = request
 
 if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
-    const [action, file] = process.argv.slice(2);
-    const payload = file ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
-    console.log(JSON.stringify(action === 'wait' && payload
-      ? await waitForTasks(payload.ids)
-      : await request(action, payload)));
+    const [action, ...args] = process.argv.slice(2);
+    let result;
+    if (action === 'wait') {
+      // Accept the previous JSON-file form as well as plain returned IDs.
+      const saved = args.length === 1 && existsSync(args[0]) ? JSON.parse(readFileSync(args[0], 'utf8')) : null;
+      const ids = saved ? saved.ids ?? [saved.id] : args;
+      if (!ids.length) throw Error('usage: client.mjs wait <task-id> [task-id ...]');
+      result = await waitForTasks(ids);
+    } else {
+      const payload = args[0] ? JSON.parse(readFileSync(args[0], 'utf8')) : undefined;
+      result = await request(action, payload);
+    }
+    console.log(JSON.stringify(result));
   } catch (error) {
     console.error('WebGPT: ' + error.message);
     process.exitCode = 1;

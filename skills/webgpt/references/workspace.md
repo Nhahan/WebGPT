@@ -16,13 +16,12 @@ Import `request` from installed `scripts/client.mjs`, or run
 
 ```json
 {
-  "id": "unique-task-id",
   "instructions": "Implement the requested change and verify it. Preserve unrelated edits.",
-  "inputs": {},
   "terminal": { "cwd": "/absolute/project" }
 }
 ```
 
+Registration generates the ID automatically; optional `inputs` supplies named text.
 Omit `terminal` for text-only work. Privately send the returned task token to WebGPT, never the
 controller key or connection URL. Give natural objectives and constraints, not tool sequences.
 
@@ -43,13 +42,13 @@ Tokens separate cooperative tasks, not hostile shell users. Do not expose this t
 
 ## Collect
 
-Use `waitForTasks(ids)` from `scripts/client.mjs`, or
-`node <skill>/scripts/client.mjs wait <private-json-with-ids-array>`.
-It waits only for those task IDs and renews empty HTTP responses internally without output.
+Run `node <skill>/scripts/client.mjs wait <returned-id>` once.
+For several assigned tasks, append their returned IDs to the same command.
+No custom loop or extra JSON file is needed. IDs are internal bookkeeping, not user decisions.
+It waits only for those tasks and renews empty HTTP responses internally without output.
 It returns completion `events`, `backupDue`, recovery needs, or `settled:true` when no selected task
 remains running; connection errors stop the wait. Remove collected IDs before the next wait.
-The lower-level `request('wait', {ids})` yields within 55 seconds; do not repeatedly call it
-from model turns. Keep the helper running in the host runtime without inspecting progress.
+Keep that process running in the host runtime without inspecting progress.
 Unrelated saved events remain untouched. This is not a scheduler after Codex exits.
 A due backup check reads only enough to determine completion or a need for help.
 

@@ -11,6 +11,20 @@ import { configuration, request, waitForTasks } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('minimal registration generates unique IDs and CLI waits using the returned ID', () => fixture(async ({dir,config,service,admin})=>{
+  const a=await admin('register',{instructions:'First'});
+  const b=await admin('register',{instructions:'Second'});
+  assert.notEqual(a.id,b.id);
+  assert.deepEqual((await invoke(service,'get_task',{token:a.token})).structuredContent.inputs,[]);
+  await invoke(service,'submit_result',{token:a.token,status:'completed',summary:'done',result:'done'});
+  const file=join(dir,'config.json');writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const {stdout}=await execute(process.execPath,[cli,'wait',a.id],{env});
+  assert.deepEqual(JSON.parse(stdout).events.map(e=>e.id),[a.id]);
+  await assert.rejects(execute(process.execPath,[cli,'wait'],{env}),/usage/);
+  await admin('cancel',{id:b.id});
+}));
 test('quiet wait renews empty responses internally and surfaces completion or errors', async () => {
   let calls=0;
   const result=await waitForTasks(['owned'], {}, async (action,payload)=>{
