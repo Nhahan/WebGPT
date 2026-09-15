@@ -27,8 +27,9 @@ Do not wait or collect. Existing token-based open sessions remain usable until t
 
 Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
 Registration generates the ID automatically. It needs no task document:
-send the actual assignment directly in the single ChatGPT message, together with the task token
-and a request to submit the result when finished. Do not prescribe routine terminal commands.
+send only the actual assignment and task token in the single ChatGPT message. Completion submission
+is already specified by the server instructions and tool description; do not repeat it in the prompt.
+Do not prescribe routine terminal commands.
 The worker also sets the backup deadline automatically; no extra timer setup or WebGPT reporting
 is needed. Result submission/cancellation clears it, even before Codex collects or deletes anything.
 The optional JSON-file/API form supports `instructions` and named `inputs` only when useful.

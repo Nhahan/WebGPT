@@ -77,7 +77,8 @@ worker is stopped. No paid account or public plugin publication is needed.
 ## End-to-end test
 
 Register access to an owned temporary project. In one Extra High or Pro message, ask WebGPT to
-use **WebGPT Worker** to print a short value through the terminal and submit its result.
+use **WebGPT Worker** to print a short value through the terminal, providing only the task token
+and assignment. Verify that it submits its result without a completion instruction in the message.
 The command should execute in about one second; model/browser latency is separate.
 Do not assign development, multiple file operations or interactive exercises to this smoke test.
 
