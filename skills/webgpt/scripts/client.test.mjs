@@ -7,10 +7,26 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { configuration, request, waitForTasks } from './client.mjs';
+import { configuration, request, waitForTasks, collectTask } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('collection verifies saved bytes before acknowledgment without duplicating the result', () => fixture(async ({config,service,admin})=>{
+  const task=await admin('register',{instructions:'test'});
+  await invoke(service,'submit_result',{token:task.token,status:'completed',summary:'done',result:'original'});
+  const event=(await admin('wait',{ids:[task.id]})).events[0];
+  writeFileSync(event.artifact,'changed');
+  await assert.rejects(collectTask(task.id,config),/integrity mismatch/);
+  assert.equal((await admin('status')).events.length,1);
+  writeFileSync(event.artifact,'original');
+  const collected=await collectTask(task.id,config);
+  assert.equal(collected.integrity,'verified');
+  assert.equal(collected.collected,true);
+  assert.equal(collected.result,undefined);
+  assert.equal(readFileSync(event.artifact,'utf8'),'original');
+  assert.equal((await admin('status')).events.length,0);
+  assert.equal((await invoke(service,'get_task',{token:task.token})).isError,true);
+}));
 test('CLI registers project access without a task document or duplicated instructions', () => fixture(async ({dir,config,service,admin})=>{
   const file=join(dir,'config.json');writeFileSync(file,JSON.stringify(config));
   const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));

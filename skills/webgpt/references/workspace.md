@@ -46,11 +46,13 @@ Keep that process running in the host runtime without inspecting progress.
 Unrelated saved events remain untouched. This is not a scheduler after Codex exits.
 A due backup check reads only enough to determine completion or a need for help.
 
-Verify saved result SHA-256 and accept the handoff under SKILL.md's result-acceptance rules;
-this does not require rerunning the worker's tests. Then `request('ack',{id})`, or run `node <skill>/scripts/client.mjs ack <returned-id>`; the CLI also accepts the legacy JSON payload file. After a due check,
-use `request('checked',{id})` or `client.mjs checked <returned-id>`; abandoned tasks use `request('cancel',{id})` or `client.mjs cancel <returned-id>`. `ack`, `checked`, and `cancel` each accept exactly one task ID or one legacy JSON payload file. Terminal tasks are not
-rescheduled. Ack/cancel revoke tokens; saved results survive restarts. Delete task chats and close
-their tabs per SKILL.md. Preserve personal chats.
+Review the result under SKILL.md, then run `node <skill>/scripts/client.mjs collect <returned-id>`.
+This verifies the saved file hash and acknowledges receipt in one command, returning only summary
+and artifact metadata. A mismatch fails without acknowledgment. It neither reruns tests nor
+certifies correctness; keep using the existing result and evidence, not duplicate reports.
+After a due backup check use `client.mjs checked <returned-id>`; abandon with
+`client.mjs cancel <returned-id>`. Finished tasks are not rescheduled. Collection/cancellation
+revokes tokens; saved results survive restarts. Delete task chats and close their tabs per SKILL.md.
 
 No computer-control backend is bundled. Use a separately installed, documented and authorized
 capability only when verified available; terminal access alone does not prove computer control.

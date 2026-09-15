@@ -2,7 +2,7 @@ import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 // Shared by the worker and controller client; never store configuration in the skill.
 export function configuration(env = process.env) {
@@ -51,6 +51,17 @@ export async function waitForTasks(ids, config = configuration(), read = request
   }
 }
 
+// Verify the saved artifact before retiring access. Collection is not a code-quality verdict.
+export async function collectTask(id, config = configuration()) {
+  const result = await request('wait', { ids: [id] }, config);
+  const event = result.events.find(event => event.id === id);
+  if (!event) throw Error('task has no uncollected result');
+  const bytes = readFileSync(event.artifact);
+  if (createHash('sha256').update(bytes).digest('hex') !== event.sha256) throw Error('saved result integrity mismatch');
+  await request('ack', { id }, config);
+  return { ...event, integrity: 'verified', collected: true };
+}
+
 if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     const [action, ...args] = process.argv.slice(2);
@@ -61,6 +72,9 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
       const ids = saved ? saved.ids ?? [saved.id] : args;
       if (!ids.length) throw Error('usage: client.mjs wait <task-id> [task-id ...]');
       result = await waitForTasks(ids);
+    } else if (action === 'collect') {
+      if (args.length !== 1) throw Error('usage: client.mjs collect <task-id>');
+      result = await collectTask(args[0]);
     } else if (action === 'register' && args[0] === '--cwd') {
       if (args.length !== 2) throw Error('usage: client.mjs register --cwd <project-directory>');
       result = await request('register', { terminal: { cwd: args[1] } });

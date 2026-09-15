@@ -23,7 +23,8 @@ For installation or missing capabilities, follow [setup.md](references/setup.md)
   Reuse verified setup; diagnose access only when unavailable or an actual call fails.
   Report missing access instead of silently doing the work yourself.
   Text-only tasks need no connector.
-- Retain only the task ID and owned chat/tab identifiers needed for recovery and cleanup.
+- Reuse registration output for the task ID; retain owned chat/tab identifiers in the current
+  context. Do not create separate tracking files unless recovery genuinely requires one.
 - Prepare mode, inputs and callback registration first. Fill and immediately submit the prompt
   in one browser call where supported, then verify submission before any retry.
 
@@ -48,7 +49,8 @@ Waiting requires an active parent runtime; this skill supplies no after-exit wak
 
 At completion, review the saved result once against the requested outcome. Reuse existing
 evidence rather than creating duplicate reports; load only the summary, relevant diff and evidence,
-not entire transcripts or logs. Check saved-result integrity and distinguish PASS/FAIL/NOT_RUN.
+not entire transcripts or logs. Distinguish PASS/FAIL/NOT_RUN; use the bundled collection command
+to verify saved-result integrity and acknowledge receipt together.
 Accept supported tests on the delivered version without rerunning them. Add only targeted checks
 for failures, missing or conflicting evidence, subsequent integration changes, or an explicit
 user/project requirement. Do not independently redo WebGPT's investigation or implementation.
@@ -60,7 +62,7 @@ deadlines, regardless of cleanup status. Reconcile pending tasks after a context
 
 ## Close
 
-After preserving results and recording their verification status:
+After preserving and accepting or rejecting the result (no separate report required):
 
 - Permanently delete the exact task chats and accept their matching dialogs, using the workflow's
   deletion authorization wherever tool policy permits. Ask only when action-time confirmation
