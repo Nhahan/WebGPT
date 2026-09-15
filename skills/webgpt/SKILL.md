@@ -14,23 +14,26 @@ capability. Normal delegation reads workspace.md, not setup.md or the worker sou
 ## Open — user-controlled mode
 
 For `webgpt open [project path]`, use the named project or current directory. This mode overrides
-all delegation monitoring and cleanup below. Run `node <skill>/scripts/client.mjs open [project path]`
-once. It returns the global `WebGPT Worker` connection name and a tiny private `attachmentPath`.
-Reuse the existing global plugin: never create project-specific plugins or change its URL.
-Open a new signed-in ChatGPT tab, select WebGPT Worker and attach that exact file through documented
-browser upload controls. The request authorizes sharing this project's connection file with ChatGPT.
-Read the browser's upload documentation before using its file chooser. If upload is refused, follow
-its upload troubleshooting and report the missing permission; never substitute pasted file text.
-Preserve the current model unless specified. Do not type or send a message, task, token or probe;
-the user sends the first message with the attachment. Verify the selected plugin, completed upload
-and absence of sent messages, then keep the tab open as a deliverable and hand it over.
-No setup scans, connection registration or worker restart during normal use. Read setup.md only
-if the global plugin is genuinely missing. Do not print the attachment contents or token.
-If attachment/setup fails, cancel only a newly created session (`reused:false`), never a reused one;
-report the failure, and do not hand off an unconnected tab.
-After handoff, do not wait, collect, monitor, delete the chat or close its tabs. The user controls it.
-The file binds the project without changing a global current directory. Reuse a live project lease;
-expired/cancelled leases receive fresh tokens, never renewed access through an old attachment.
+all delegation monitoring and cleanup below. Read workspace.md for the existing connection.
+The request already authorizes creating the project's terminal connection, sharing its private URL
+with signed-in ChatGPT and accepting the matching connection dialogs. Do not ask for consent again;
+ask only for an action the user must personally perform, such as signing in.
+Run `node <skill>/scripts/client.mjs open [project path]` once. It returns a stable connection name
+and privately usable URL, reusing a live connection for the same project without renewing its lease.
+Open a new tab and select the returned connection name in the composer plugin menu. If present,
+handoff immediately: no setup reads, re-registration, process scans, probes or worker restart.
+Only if absent, register that exact name and URL through setup.md's connection steps, then select it.
+If `needsPublicOrigin` is returned, resolve the existing forwarding origin once and save
+`publicOrigin` in the worker config; do not repeatedly search old notes or change the tunnel.
+Never repoint an existing connection to a new session. Expired sessions receive fresh names and URLs.
+This connection exposes only token-free terminal tools and binds the project on the server.
+Preserve the current model unless specified. Do not type or send any message, task, token or probe;
+the user starts the conversation. Verify the selected connection and absence of sent messages,
+mark the tab as a deliverable using the browser's supported keep-open mechanism, and hand it over.
+If connection setup fails, cancel only a newly created session (`reused:false`), not a reused one;
+report the failure and never substitute a bootstrap
+message or an unconnected tab. Stop after handoff: no wait,
+collection, backup checks, chat deletion or tab closure. The user may send unlimited messages.
 The worker automatically revokes access after 24 hours without terminal use, checked within one
 minute; each successful terminal call renews it, and running commands are protected. Expiry never
 deletes chats, tabs or project files. The persistent worker, not Codex, handles expiry.

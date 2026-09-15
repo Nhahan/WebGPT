@@ -11,20 +11,24 @@ not enforced restrictions. Never silently upgrade a file-only grant to shell acc
 
 ## Assign
 
-For user-led `webgpt open`, run `node <skill>/scripts/client.mjs open [project path]`.
-The default is cwd. It reuses an unexpired lease for the canonical project and writes a tiny private
-text attachment containing the project and token. Output includes `attachmentPath`, `reused` and
-the fixed `connectionName: "WebGPT Worker"`; no private URL lookup or per-project plugin is needed.
-Select the existing global plugin and attach the file to a new blank chat, without sending a message.
-The first user message supplies the attachment. Do not add this attachment to `xh`/`p` tasks;
-their prompt continues to carry the token.
-The shared plugin exposes the same tools in every chat. An open token cannot submit a task result;
-the session is user-controlled and replies stay in chat. No completion monitoring or collection.
-Opening does not renew the 24-hour idle lease; terminal use does, and running commands prevent expiry.
-The worker expires access every minute and on calls/startup. Old attachments contain revoked tokens
-after expiry/cancellation and cannot switch to a new project. Local attachment files may remain as
-inert private files; never remove project files or user chats during expiry.
-Existing project-specific connections remain compatible until expiry, but create no new ones.
+For user-led `webgpt open`, use `node <skill>/scripts/client.mjs open /absolute/project` instead.
+The path is optional and defaults to cwd. The command reuses an unexpired session for the canonical
+project path and returns `reused`, `connectionName`, and a private `connectionUrl` when `publicOrigin`
+is saved in config (`needsPublicOrigin` otherwise). Select the named connection in a blank chat;
+create it only if missing. No per-open registration, setup scan or service restart is needed.
+Reopening does not renew the lease; only terminal use does. Chats for the same live project share
+that lease. Expired/cancelled URLs stay revoked; a fresh session gets a new URL and name.
+Changing the forwarding origin also changes the name; do not repoint an old connection.
+The URL is the session capability: keep it out of chat messages, screenshots and reports. No token
+argument or bootstrap message is needed. Only `exec_command` and `write_stdin` are exposed;
+the route binds the project and rejects other tools or explicit token arguments. Never repoint an
+existing connection to another session: old chats must not gain access to the new project.
+Terminal calls renew
+its 24-hour idle lease; active commands prevent expiry. The worker checks expiry every minute and
+on incoming calls/startup, persists the last-use time, and revokes expired tokens without touching
+the user's chat or files. Tool discovery does not renew the lease. Expired URLs return 404;
+the inactive plugin entry may remain in ChatGPT, but grants no access. Replies stay in ChatGPT.
+Do not wait or collect. Existing token-based open sessions remain usable until they expire.
 
 Run `node <skill>/scripts/client.mjs register --cwd /absolute/project`.
 Registration generates the ID automatically. It needs no task document:

@@ -1,6 +1,6 @@
-import { readFileSync, existsSync, realpathSync, writeFileSync, chmodSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -31,34 +31,35 @@ export function configuration(env = process.env) {
   return config;
 }
 
-// Share the one Worker plugin; only the attachment carries this chat's project token.
+// Reuse an unexpired project lease without renewing it or restarting the shared worker.
 export async function openProject(cwd = process.cwd(), config = configuration(), now = Date.now()) {
   cwd = realpathSync(cwd);
   const statePath = join(config.dataDir, 'state.json');
   const tasks = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : [];
   const existing = tasks.find(t => t.mode === 'open' && t.status === 'running' && !t.collected &&
-    t.token && t.terminal?.cwd === cwd && now - t.lastUsed < 86400000);
+    t.openKey && t.token && t.terminal?.cwd === cwd && now - t.lastUsed < 86400000);
   let result;
   if (existing) {
-    const secret = config.publicMcp ? '/' + readFileSync(join(config.dataDir, 'mcp-path.key'), 'utf8') : '';
-    const response = await fetch(`http://127.0.0.1:${config.mcpPort}/mcp${secret}`, {
+    const response = await fetch(`http://127.0.0.1:${config.mcpPort}/open/${existing.openKey}`, {
       method: 'POST', headers: {'content-type':'application/json'},
-      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'get_task',arguments:{token:existing.token}}}),
-      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'}), signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) throw Error('Existing Worker connection could not be verified');
-    const data = (await response.json()).result;
-    if (!data?.isError && data?.structuredContent?.mode === 'open' && data.structuredContent.status === 'running')
-      result = {id:existing.id,token:existing.token,idleExpiresAt:existing.lastUsed+86400000,reused:true};
-    else if (!data?.isError) throw Error('Unexpected Worker session response');
+    if (response.ok && (await response.json()).result?.tools?.length === 2)
+      result = {id:existing.id,mode:'open',connectionPath:'/open/'+existing.openKey,idleExpiresAt:existing.lastUsed+86400000,reused:true};
+    else if (response.status !== 404) throw Error('Existing open connection could not be verified');
   }
-  if (!result) result = {...await request('register', {mode:'open',terminal:{cwd}}, config),reused:false};
-  const attachmentPath = join(config.dataDir, `open-${result.id}.txt`);
-  const content = `WebGPT Worker — user-controlled terminal session\nProject: ${cwd}\nTask token: ${result.token}\nReply directly in chat.\n`;
-  writeFileSync(attachmentPath, content, {mode:0o600});
-  chmodSync(attachmentPath, 0o600);
-  return {id:result.id,mode:'open',project:cwd,reused:result.reused,idleExpiresAt:result.idleExpiresAt,
-    connectionName:'WebGPT Worker',attachmentPath};
+  if (!result) {
+    result = await request('register', {mode:'open',terminal:{cwd}}, config);
+    if (!result.connectionPath) {
+      await request('cancel', {id:result.id}, config);
+      throw Error('Running worker needs an update for message-free open; preserve active sessions and restart when idle');
+    }
+    delete result.token;
+    result.reused = false;
+  }
+  const suffix = createHash('sha256').update((config.publicOrigin ?? '') + result.id).digest('hex').slice(0,8);
+  return {...result,project:cwd,connectionName:`WebGPT Open ${basename(cwd)} ${suffix}`,
+    ...(config.publicOrigin ? {connectionUrl:config.publicOrigin+result.connectionPath} : {needsPublicOrigin:true})};
 }
 
 export async function request(action, payload, config = configuration()) {
