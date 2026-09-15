@@ -11,6 +11,15 @@ import { configuration, request } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('client and worker modules can be imported from stdin scripts', async () => {
+  const client = new URL('./client.mjs', import.meta.url).href;
+  const worker = new URL('./worker.mjs', import.meta.url).href;
+  const stdout = await new Promise((resolve,reject) => {
+    const child=execFile(process.execPath,['--input-type=module','-'],(error,stdout)=>error?reject(error):resolve(stdout));
+    child.stdin.end(`await import(${JSON.stringify(client)}); await import(${JSON.stringify(worker)}); console.log('imported');`);
+  });
+  assert.equal(stdout.trim(),'imported');
+});
 const invoke = async (s, name, args) => {
   const response = await fetch(`http://127.0.0.1:${s.mcpPort}/mcp`, {
     method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),

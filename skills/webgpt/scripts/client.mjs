@@ -40,7 +40,7 @@ export async function request(action, payload, config = configuration()) {
   return result;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     const [action, file] = process.argv.slice(2);
     const payload = file ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
