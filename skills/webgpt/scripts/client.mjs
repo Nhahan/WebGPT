@@ -61,6 +61,10 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
       const ids = saved ? saved.ids ?? [saved.id] : args;
       if (!ids.length) throw Error('usage: client.mjs wait <task-id> [task-id ...]');
       result = await waitForTasks(ids);
+    } else if (['ack', 'checked', 'cancel'].includes(action)) {
+      if (args.length !== 1) throw Error(`usage: client.mjs ${action} <task-id|json-file>`);
+      const payload = existsSync(args[0]) ? JSON.parse(readFileSync(args[0], 'utf8')) : { id: args[0] };
+      result = await request(action, payload);
     } else {
       const payload = args[0] ? JSON.parse(readFileSync(args[0], 'utf8')) : undefined;
       result = await request(action, payload);

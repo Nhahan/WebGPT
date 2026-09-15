@@ -25,6 +25,40 @@ test('minimal registration generates unique IDs and CLI waits using the returned
   await assert.rejects(execute(process.execPath,[cli,'wait'],{env}),/usage/);
   await admin('cancel',{id:b.id});
 }));
+test('ack, checked and cancel CLI accept direct task IDs and legacy JSON files', () => fixture(async ({dir,config,service,admin,advance})=>{
+  const file=join(dir,'config.json'); writeFileSync(file,JSON.stringify(config));
+  const cli=fileURLToPath(new URL('./client.mjs',import.meta.url));
+  const env={...process.env,WEBGPT_CONFIG:file,WEBGPT_DATA_DIR:dir};
+  const run=(...args)=>execute(process.execPath,[cli,...args],{env});
+
+  for (const mode of ['direct','file']) {
+    const ack=await admin('register',{id:`${mode}-ack`,instructions:'ack',inputs:{}});
+    await invoke(service,'submit_result',{token:ack.token,status:'completed',summary:'done',result:'done'});
+    const checked=await admin('register',{id:`${mode}-checked`,instructions:'checked',inputs:{}});
+    const cancelled=await admin('register',{id:`${mode}-cancel`,instructions:'cancel',inputs:{}});
+    advance(900000);
+    assert.ok((await admin('status')).backupDue.includes(checked.id));
+
+    const argFor=id=>{
+      if(mode==='direct') return id;
+      const payload=join(dir,`${id}.json`); writeFileSync(payload,JSON.stringify({id})); return payload;
+    };
+    await run('ack',argFor(ack.id));
+    await run('checked',argFor(checked.id));
+    await run('cancel',argFor(cancelled.id));
+
+    const status=await admin('status');
+    assert.ok(!status.events.some(event=>event.id===ack.id));
+    assert.ok(!status.backupDue.includes(checked.id));
+    assert.equal((await invoke(service,'get_task',{token:cancelled.token})).isError,true);
+  }
+
+  for (const action of ['ack','checked','cancel']) {
+    await assert.rejects(run(action),new RegExp(`usage: client\.mjs ${action}`));
+    await assert.rejects(run(action,'one','two'),new RegExp(`usage: client\.mjs ${action}`));
+  }
+}));
+
 test('quiet wait renews empty responses internally and surfaces completion or errors', async () => {
   let calls=0;
   const result=await waitForTasks(['owned'], {}, async (action,payload)=>{
