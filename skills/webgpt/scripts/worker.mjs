@@ -16,7 +16,7 @@ export const tools = [
   {name:'read_input',description:'Read one explicitly supplied input by name; no arbitrary filesystem access.',inputSchema:schema({token:str,name:str}),annotations:{readOnlyHint:true,openWorldHint:false}},
   {name:'submit_result',description:'Save the task deliverable, evidence and limitations, and notify the supervisor. No file changes required. Terminal: stops backup checks. Retry identical submission safely. Do not delete the chat.',inputSchema:schema({token:str,status:{type:'string',enum:['completed','failed','cancelled']},summary:str,result:str}),annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}}
 ];
-export async function start({dir,port=43137,controlPort=43139,publicMcp=false,backupMs=900000,now=Date.now}={}) {
+export async function start({dir,port=43137,controlPort=43139,publicMcp=false,backupMs=1200000,now=Date.now}={}) {
   dir=resolve(dir); mkdirSync(dir,{recursive:true,mode:0o700});
   const lock=resolve(dir,'worker.lock');
   try{mkdirSync(lock,{mode:0o700});}catch(e){if(e.code==='EEXIST')throw Error('WebGPT data directory locked: '+lock+'; verify its owner before recovering a stale lock');throw e;}

@@ -64,7 +64,7 @@ test('ack, checked and cancel CLI accept direct task IDs and legacy JSON files',
     await invoke(service,'submit_result',{token:ack.token,status:'completed',summary:'done',result:'done'});
     const checked=await admin('register',{id:`${mode}-checked`,instructions:'checked',inputs:{}});
     const cancelled=await admin('register',{id:`${mode}-cancel`,instructions:'cancel',inputs:{}});
-    advance(900000);
+    advance(1200000);
     assert.ok((await admin('status')).backupDue.includes(checked.id));
 
     const argFor=id=>{
@@ -215,18 +215,18 @@ test('parallel early completions persist, verify their hashes and retry idempote
   assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
 }));
 
-test('15-minute backup checks reset only running tasks and never revive terminal tasks', () => fixture(async ({ service, admin, advance }) => {
+test('20-minute backup checks reset only running tasks and never revive terminal tasks', () => fixture(async ({ service, admin, advance }) => {
   const a = await admin('register', { id: 'a', instructions: 'Review', inputs: {} });
   await admin('register', { id: 'b', instructions: 'Review', inputs: {} });
-  advance(899999); assert.deepEqual((await admin('status')).backupDue, []);
+  advance(1199999); assert.deepEqual((await admin('status')).backupDue, []);
   advance(1); assert.deepEqual((await admin('wait')).backupDue, ['a', 'b']);
   await invoke(service, 'submit_result', { token: a.token, status: 'completed', summary: 'done', result: 'done' });
   await admin('checked', { id: 'b' });
   assert.deepEqual((await admin('status')).backupDue, []);
-  advance(900000); assert.deepEqual((await admin('status')).backupDue, ['b']);
+  advance(1200000); assert.deepEqual((await admin('status')).backupDue, ['b']);
   await admin('checked', { id: 'a' }); await admin('ack', { id: 'a' });
   await admin('cancel', { id: 'b' });
-  advance(900000); assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
+  advance(1200000); assert.deepEqual(await admin('wait'), { events: [], backupDue: [] });
 }));
 
 test('a single text-only task survives backup intervals and restart, then completes without file access', () => fixture(async f => {
@@ -243,7 +243,7 @@ test('a single text-only task survives backup intervals and restart, then comple
     })).isError, true);
   }
   // Advance only the fixture clock: backup checks are not execution deadlines.
-  for (const elapsed of [900000, 24 * 60 * 60 * 1000]) {
+  for (const elapsed of [1200000, 24 * 60 * 60 * 1000]) {
     f.advance(elapsed);
     assert.deepEqual(await f.admin('status'), { events: [], backupDue: [task.id] });
     assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.status, 'running');
@@ -256,7 +256,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   assert.equal((await invoke(f.service, 'submit_result', {
     token: task.token, status: 'completed', summary: 'Analysis complete', result,
   })).isError, false);
-  f.advance(900000);
+  f.advance(1200000);
   const notice = await f.admin('wait');
   assert.deepEqual(notice.backupDue, []);
   assert.equal(notice.events.length, 1);
@@ -267,7 +267,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   assert.equal(saved.nextCheck, null);
   assert.equal(saved.terminal, null);
   await f.admin('ack', { id: task.id });
-  f.advance(900000);
+  f.advance(1200000);
   assert.deepEqual(await f.admin('wait'), { events: [], backupDue: [] });
 }));
 

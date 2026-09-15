@@ -46,7 +46,7 @@ tests together; request a concise result with changed files, check results, exis
 remaining issues. Leave execution to WebGPT.
 
 Wait for the saved completion event. Between events, do not inspect chats, screenshots, logs,
-files or processes to track progress. Only when the worker returns `backupDue` (every **15 minutes**
+files or processes to track progress. Only when the worker returns `backupDue` (every **20 minutes**
 for unfinished work), Codex makes one minimal chat-status check, not a progress audit or timeout.
 The worker times the check; it does not read the browser. An explicit help/failure signal
 or user intervention permits targeted handling, not continuous monitoring.
