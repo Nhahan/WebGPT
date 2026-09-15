@@ -49,6 +49,18 @@ Reuse a visibly correct mode instead of reopening its settings. Request images o
 cannot resolve the next action. Preserve mandatory first-use output, fresh target grounding and
 permission gates; never echo image/base64 payloads as text or export the conversation by default.
 
+After the browser tool's required first-use call, use the pure CUA helpers in
+`scripts/browser.mjs` where local module imports are supported:
+`var {sendOnce, deleteAndClose} = await import('<installed-skill>/scripts/browser.mjs')`.
+On a newly created owned tab, `sendOnce(tab, prompt, 'xh'|'pro')` checks the current mode and sends
+once, returning only status/URL. A `needs_*` result requires grounded UI handling; never silently
+change modes or resend after `submission_unconfirmed`. The helper does not select unknown modes.
+After result collection, `deleteAndClose(tab, cua, browserId, ownedChatUrl, true)` batches cleanup.
+Pass `true` only after the actual tool confirmation policy is satisfied (including permitted
+test preapproval); it is not a substitute for approval. Unknown controls stop the batch.
+If imports are unsupported, use the same documented CUA operations directly; do not install
+another browser backend or bypass permissions. Do not inspect helper source during normal use.
+
 ## Collect
 
 Use result acceptance, never continuous supervision. Delegate implementation and its relevant
