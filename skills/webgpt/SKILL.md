@@ -27,15 +27,15 @@ Do not invent access, copy cookies, use private browser APIs or take over unrela
   for the task; omit credentials and unrelated data.
 - Keep a private ledger: task ID, objective, ownership, allowed inputs/actions, URL/tab IDs (including recovery tabs), output
   paths, work/cleanup states and last backup check. Preserve it for handoffs.
-- Development means WebGPT directly reads/creates/edits/deletes project files through a verified
-  connector. Use [workspace.md](references/workspace.md) for task registration and completion.
-  Grant the project root and `edit` mode, not per-file lists; use `read` for reviews/analysis.
-  Coordinate disjoint ownership in prompts. Preserve others' edits and unrelated files; read before
-  changing, reject stale revisions and preserve recoverable originals for material deletion.
+- Development means WebGPT works directly through the bundled WebGPT Worker terminal.
+  Use [workspace.md](references/workspace.md) for registration and completion. Set the project's
+  default cwd; it is not a sandbox. File operations, Git and tests use shell commands, not CRUD
+  tools. Follow the user's scope, coordinate disjoint edits and preserve unrelated work.
 - For local-file tasks, verify that the selected chat can call the required tools on the exact project.
   Missing direct access blocks implementation: report it, never silently apply returned patches
-  yourself or claim edits. Patch-only delivery requires a request. File access adds no Git/PR/push,
-  process-control or out-of-scope authority. Text-only work needs no connector.
+  yourself or claim edits. Patch-only delivery requires a request. Terminal capability does not
+  authorize out-of-scope actions. Text-only work needs no connector. Do not substitute Chat On
+  Steroids or another connector for WebGPT Worker.
 
 Prepare prompt, mode, attachments and any callback registration before typing. Fill and immediately
 submit in one browser-tool call using observed controls where supported. No snapshot, round trip,

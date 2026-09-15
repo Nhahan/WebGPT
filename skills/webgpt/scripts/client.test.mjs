@@ -121,7 +121,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   const task = await f.admin('register', {
     id: 'transcript-analysis', instructions: 'Analyze the supplied transcript.', inputs: { transcript },
   });
-  assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.workspace, null);
+  assert.equal((await invoke(f.service, 'get_task', { token: task.token })).structuredContent.terminal, null);
   assert.equal((await invoke(f.service, 'read_input', { token: task.token, name: 'transcript' })).structuredContent.text, transcript);
   for (const name of ['list_files', 'read_file', 'write_file', 'delete_file']) {
     assert.equal((await invoke(f.service, name, {
@@ -152,7 +152,7 @@ test('a single text-only task survives backup intervals and restart, then comple
   assert.equal(notice.events[0].sha256, createHash('sha256').update(result).digest('hex'));
   const saved = JSON.parse(readFileSync(join(f.dir, 'state.json'), 'utf8'))[0];
   assert.equal(saved.nextCheck, null);
-  assert.deepEqual(saved.changes, []);
+  assert.equal(saved.terminal, null);
   await f.admin('ack', { id: task.id });
   f.advance(900000);
   assert.deepEqual(await f.admin('wait'), { events: [], backupDue: [] });
@@ -203,31 +203,4 @@ test('one data directory cannot be opened by two workers even on different ports
   assert.deepEqual(await f.admin('status'), { events: [], backupDue: [] });
   await f.restart();
   assert.deepEqual(await f.admin('status'), { events: [], backupDue: [] });
-}));
-
-test('restart restores missing applied receipts and surfaces ambiguous crash journals without replaying writes', () => fixture(async f => {
-  const root = join(f.dir, 'project'); mkdirSync(root);
-  const a = await f.admin('register', { id: 'a', instructions: 'edit', inputs: {}, workspace: { root, mode: 'edit' } });
-  const changed = await invoke(f.service, 'write_file', { token: a.token, path: 'a.txt', text: 'applied', expectedSha256: null });
-  assert.equal(changed.isError, false);
-  // Simulate the crash window after mutation/journal persistence but before task-state persistence.
-  const statePath = join(f.dir, 'state.json');
-  let state = JSON.parse(readFileSync(statePath, 'utf8')); state[0].changes = [];
-  writeFileSync(statePath, JSON.stringify(state)); await f.restart();
-  let task = (await invoke(f.service, 'get_task', { token: a.token })).structuredContent;
-  assert.equal(task.changes[0].operation, changed.structuredContent.operation);
-  assert.deepEqual(task.recoveryRequired, []);
-  const journal = join(f.dir, 'recovery', 'a', changed.structuredContent.operation + '.json');
-  writeFileSync(journal, JSON.stringify({ ...changed.structuredContent, state: 'prepared' }));
-  state = JSON.parse(readFileSync(statePath, 'utf8')); state[0].changes = [];
-  writeFileSync(statePath, JSON.stringify(state)); await f.restart();
-  task = (await invoke(f.service, 'get_task', { token: a.token })).structuredContent;
-  assert.equal(task.recoveryRequired.length, 1);
-  assert.equal((await f.admin('wait')).recoveryRequired[0].id, 'a');
-  assert.equal((await invoke(f.service, 'read_file', { token: a.token, path: 'a.txt' })).structuredContent.text, 'applied');
-  assert.equal((await invoke(f.service, 'write_file', { token: a.token, path: 'b.txt', text: 'retry', expectedSha256: null })).isError, true);
-  assert.equal((await invoke(f.service, 'submit_result', { token: a.token, status: 'completed', summary: 'done', result: 'done' })).isError, true);
-  assert.equal(readFileSync(join(root, 'a.txt'), 'utf8'), 'applied');
-  await f.admin('cancel', { id: 'a' });
-  assert.deepEqual(await f.admin('wait'), { events: [], backupDue: [] });
 }));
