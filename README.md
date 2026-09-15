@@ -36,6 +36,8 @@ webgpt p Research this topic and summarize the findings.
 webgpt open /path/to/project
 ```
 
-Open a terminal-connected chat you control. Access expires after 24 hours of inactivity.
+Open a blank ChatGPT tab connected to your project's terminal. You start the conversation,
+run the work and close the chat; Codex only sets up the connection.
+Terminal access expires after 24 hours without use; each use resets the timer.
 
 `xh` = Extra High · `p` = Pro.
