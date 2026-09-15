@@ -27,9 +27,10 @@ export function configuration(env = process.env) {
 export async function request(action, payload, config = configuration()) {
   const read = ['wait', 'status'].includes(action);
   if (!read && !['register', 'ack', 'checked', 'cancel'].includes(action)) throw Error('unknown controller action');
-  if (read ? payload !== undefined : !payload || typeof payload !== 'object') throw Error('invalid controller payload');
+  if (read ? payload !== undefined && !(action === 'wait' && Array.isArray(payload?.ids) && payload.ids.length && payload.ids.every(id => typeof id === 'string')) : !payload || typeof payload !== 'object') throw Error('invalid controller payload');
   const key = readFileSync(join(config.dataDir, 'controller.key'), 'utf8');
-  const response = await fetch('http://127.0.0.1:' + config.controlPort + '/' + action, {
+  const query = action === 'wait' && payload ? '?' + new URLSearchParams(payload.ids.map(id => ['id', id])) : '';
+  const response = await fetch('http://127.0.0.1:' + config.controlPort + '/' + action + query, {
     method: read ? 'GET' : 'POST',
     headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' },
     body: read ? undefined : JSON.stringify(payload),
@@ -40,11 +41,21 @@ export async function request(action, payload, config = configuration()) {
   return result;
 }
 
+// HTTP renewals stay here, not in model turns. Return only actionable task state.
+export async function waitForTasks(ids, config = configuration(), read = request) {
+  for (;;) {
+    const result = await read('wait', { ids }, config);
+    if (result.events.length || result.backupDue.length || result.recoveryRequired?.length || result.settled) return result;
+  }
+}
+
 if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     const [action, file] = process.argv.slice(2);
     const payload = file ? JSON.parse(readFileSync(file, 'utf8')) : undefined;
-    console.log(JSON.stringify(await request(action, payload)));
+    console.log(JSON.stringify(action === 'wait' && payload
+      ? await waitForTasks(payload.ids)
+      : await request(action, payload)));
   } catch (error) {
     console.error('WebGPT: ' + error.message);
     process.exitCode = 1;

@@ -43,9 +43,9 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const revoke=t=>{delete t.token;t.inputs={};t.instructions='';};
   for(const t of tasks) if(t.collected)revoke(t);
   if(tasks.length)persist();
-  const view=()=>{
-    const recoveryRequired=tasks.filter(t=>t.status==='running'&&t.recoveryRequired?.length).map(t=>({id:t.id,journals:t.recoveryRequired}));
-    return {events:tasks.filter(t=>t.status!=='running'&&!t.collected).map(t=>({id:t.id,status:t.status,summary:t.summary,artifact:t.artifact,sha256:t.sha256})),backupDue:tasks.filter(t=>t.status==='running'&&now()>=t.nextCheck).map(t=>t.id),...(recoveryRequired.length?{recoveryRequired}:{})};
+  const view=(selected=tasks)=>{
+    const recoveryRequired=selected.filter(t=>t.status==='running'&&t.recoveryRequired?.length).map(t=>({id:t.id,journals:t.recoveryRequired}));
+    return {events:selected.filter(t=>t.status!=='running'&&!t.collected).map(t=>({id:t.id,status:t.status,summary:t.summary,artifact:t.artifact,sha256:t.sha256})),backupDue:selected.filter(t=>t.status==='running'&&now()>=t.nextCheck).map(t=>t.id),...(recoveryRequired.length?{recoveryRequired}:{})};
   };
   const wake=()=>{for(const fn of [...waiters])fn();};
   const json=(res,status,value)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));};
@@ -89,10 +89,16 @@ export async function start({dir,port=43137,controlPort=43139,publicMcp=false,ba
   const control=createServer(async(req,res)=>{
     if(req.headers.authorization!=='Bearer '+key)return json(res,401,{});
     try{
-      if(req.method==='GET'&&req.url==='/wait'){
-        const v=view();if(v.events.length||v.backupDue.length||v.recoveryRequired?.length||!tasks.some(t=>t.status==='running'))return json(res,200,v);
-        let timer;const done=()=>{clearTimeout(timer);waiters.delete(done);if(!res.destroyed)json(res,200,view());};waiters.add(done);
-        const due=Math.min(...tasks.filter(t=>t.status==='running').map(t=>t.nextCheck-now()));timer=setTimeout(done,Math.max(1,Math.min(55000,due)));res.on('close',()=>{clearTimeout(timer);waiters.delete(done);});return;
+      const url=new URL(req.url,'http://localhost');
+      if(req.method==='GET'&&url.pathname==='/wait'){
+        const ids=url.searchParams.getAll('id');
+        if(ids.some(id=>!tasks.some(t=>t.id===id)))throw Error('unknown task');
+        const selected=ids.length?tasks.filter(t=>ids.includes(t.id)):tasks;
+        const snapshot=()=>({...view(selected),...(ids.length?{settled:!selected.some(t=>t.status==='running')}:{})});
+        const ready=v=>v.events.length||v.backupDue.length||v.recoveryRequired?.length||!selected.some(t=>t.status==='running');
+        const v=snapshot();if(ready(v))return json(res,200,v);
+        let timer;const done=(timeout=false)=>{const v=snapshot();if(!timeout&&!ready(v))return;clearTimeout(timer);waiters.delete(done);if(!res.destroyed)json(res,200,v);};waiters.add(done);
+        const due=Math.min(...selected.filter(t=>t.status==='running').map(t=>t.nextCheck-now()));timer=setTimeout(()=>done(true),Math.max(1,Math.min(55000,due)));res.on('close',()=>{clearTimeout(timer);waiters.delete(done);});return;
       }
       if(req.method==='GET'&&req.url==='/status')return json(res,200,view());
       if(req.method!=='POST')return json(res,404,{});

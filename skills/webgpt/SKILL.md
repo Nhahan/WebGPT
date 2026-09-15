@@ -15,7 +15,8 @@ For installation or missing capabilities, follow [setup.md](references/setup.md)
   its tools and approach within the user's scope.
 - For direct project work, use the WebGPT Worker terminal and
   [workspace.md](references/workspace.md). Set the project cwd; it is not a sandbox.
-  Verify access before dispatch. Report missing access instead of silently doing the work yourself.
+  Reuse verified setup; diagnose access only when unavailable or an actual call fails.
+  Report missing access instead of silently doing the work yourself.
   Text-only tasks need no connector.
 - Keep a private record sufficient to recover task IDs, owned chats/tabs, results and pending checks.
 - Prepare mode, inputs and callback registration first. Fill and immediately submit the prompt

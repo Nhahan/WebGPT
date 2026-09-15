@@ -43,11 +43,15 @@ Tokens separate cooperative tasks, not hostile shell users. Do not expose this t
 
 ## Collect
 
-`request('wait')` returns completion `events`, `backupDue`, or after at most 55 seconds. Renew empty
-waits within the host runtime where supported, without model output or progress inspection.
-Surface only completion, a due 15-minute backup check, or an actionable error. Scope waits to
-assigned task IDs; unrelated saved events are not work to collect. This is not a scheduler after
-Codex exits. A backup check reads only enough to determine completion or a need for help.
+Use `waitForTasks(ids)` from `scripts/client.mjs`, or
+`node <skill>/scripts/client.mjs wait <private-json-with-ids-array>`.
+It waits only for those task IDs and renews empty HTTP responses internally without output.
+It returns completion `events`, `backupDue`, recovery needs, or `settled:true` when no selected task
+remains running; connection errors stop the wait. Remove collected IDs before the next wait.
+The lower-level `request('wait', {ids})` yields within 55 seconds; do not repeatedly call it
+from model turns. Keep the helper running in the host runtime without inspecting progress.
+Unrelated saved events remain untouched. This is not a scheduler after Codex exits.
+A due backup check reads only enough to determine completion or a need for help.
 
 Verify saved result SHA-256 and accept the handoff under SKILL.md's result-acceptance rules;
 this does not require rerunning the worker's tests. Then `request('ack',{id})`. After a due check,

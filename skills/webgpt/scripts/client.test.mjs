@@ -7,10 +7,38 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { configuration, request } from './client.mjs';
+import { configuration, request, waitForTasks } from './client.mjs';
 import { start } from './worker.mjs';
 
 const execute = promisify(execFile);
+test('quiet wait renews empty responses internally and surfaces completion or errors', async () => {
+  let calls=0;
+  const result=await waitForTasks(['owned'], {}, async (action,payload)=>{
+    assert.equal(action,'wait'); assert.deepEqual(payload,{ids:['owned']});
+    return ++calls<3 ? {events:[],backupDue:[],settled:false} : {events:[{id:'owned'}],backupDue:[]};
+  });
+  assert.equal(calls,3); assert.equal(result.events[0].id,'owned');
+  await assert.rejects(waitForTasks(['owned'],{},async()=>{throw Error('connection lost');}),/connection lost/);
+  assert.equal((await waitForTasks(['owned'],{},async()=>({events:[],backupDue:[],settled:true}))).settled,true);
+});
+
+test('scoped wait ignores foreign events and wakes on owned completion or cancellation', () => fixture(async ({service,admin,config})=>{
+  const foreign=await admin('register',{id:'foreign',instructions:'Other task',inputs:{}});
+  const owned=await admin('register',{id:'owned',instructions:'My task',inputs:{}});
+  await invoke(service,'submit_result',{token:foreign.token,status:'completed',summary:'foreign',result:'foreign'});
+  let resolved=false;
+  const waiting=waitForTasks(['owned'],config).then(v=>{resolved=true;return v;});
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert.equal(resolved,false);
+  await invoke(service,'submit_result',{token:owned.token,status:'completed',summary:'owned',result:'owned'});
+  assert.deepEqual((await waiting).events.map(e=>e.id),['owned']);
+  await admin('register',{id:'cancelled',instructions:'Cancel task',inputs:{}});
+  const cancelled=waitForTasks(['cancelled'],config);
+  await admin('cancel',{id:'cancelled'});
+  assert.equal((await cancelled).settled,true);
+  await assert.rejects(waitForTasks(['missing'],config),/unknown task/);
+  assert.ok((await admin('status')).events.some(e=>e.id==='foreign'));
+}));
 test('client and worker modules can be imported from stdin scripts', async () => {
   const client = new URL('./client.mjs', import.meta.url).href;
   const worker = new URL('./worker.mjs', import.meta.url).href;
