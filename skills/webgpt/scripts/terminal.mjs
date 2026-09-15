@@ -31,7 +31,11 @@ export class Terminals {
     if (tty) {
       const child = pty.spawn(shell, cmdShell ? args.join(' ') : args, {cwd, env:process.env, name:'xterm-256color', cols:120, rows:30});
       session.write = text => child.write(text);
-      session.kill = signal => child.kill(signal);
+      session.kill = signal => {
+        if(process.platform !== 'win32') child.kill(signal);
+        else if(signal === 'SIGINT') child.write('\u0003');
+        else child.kill();
+      };
       child.onData(text => {session.output += text; notify();});
       child.onExit(({exitCode, signal}) => {session.done=true; session.exit_code=exitCode; session.signal=signal ?? null; notify();});
     } else {
