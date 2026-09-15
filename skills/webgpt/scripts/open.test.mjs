@@ -29,7 +29,7 @@ test('open connection binds its project without prompt tokens and exposes only t
     assert.deepEqual(listed.map(t=>t.name),['exec_command','write_stdin']);
     assert.ok(listed.every(t=>!t.inputSchema.properties.token&&!t.inputSchema.required.includes('token')));
     const init=(await rpc(a.connectionPath,'initialize')).result;
-    assert.ok(init.instructions.includes(dir));assert.ok(!init.instructions.includes('submit_result'));
+    assert.ok(init.instructions.includes(JSON.stringify(realpathSync(dir))));assert.ok(!init.instructions.includes('submit_result'));
     const run=await rpc(a.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
     assert.equal(run.result.isError,false);assert.ok(run.result.structuredContent.output.includes(dir));
     const other=await rpc(b.connectionPath,'tools/call',{name:'exec_command',arguments:{command:`"${process.execPath}" -p "process.cwd()"`}});
