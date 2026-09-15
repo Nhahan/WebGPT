@@ -7,8 +7,36 @@ import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {start} from './worker.mjs';
-import {request} from './client.mjs';
+import {request,openProject} from './client.mjs';
 const day=86400000;
+test('open reuses only live project connections without extending idle expiry or reviving old URLs',async()=>{
+  const dir=mkdtempSync(join(tmpdir(),'webgpt-open-reuse-'));let clock=Date.now();
+  const service=await start({dir,port:0,controlPort:0,now:()=>clock});
+  const config={dataDir:dir,mcpPort:service.mcpPort,controlPort:service.controlPort,publicOrigin:'https://example.com'};
+  try{
+    const a=await openProject(dir,config,clock);
+    assert.equal(a.reused,false);assert.equal(a.token,undefined);
+    assert.equal(a.connectionUrl,config.publicOrigin+a.connectionPath);
+    clock+=1000;
+    const b=await openProject(join(dir,'.'),config,clock);
+    assert.equal(b.reused,true);assert.equal(b.id,a.id);assert.equal(b.connectionName,a.connectionName);
+    assert.equal(b.idleExpiresAt,a.idleExpiresAt);
+    assert.equal(JSON.parse(readFileSync(join(dir,'state.json'),'utf8')).length,1);
+    const changedOrigin=await openProject(dir,{...config,publicOrigin:'https://other.example'},clock);
+    assert.equal(changedOrigin.id,a.id);assert.notEqual(changedOrigin.connectionName,a.connectionName);
+    const different=await openProject(tmpdir(),config,clock);assert.notEqual(different.id,a.id);
+    clock+=day;await service.expireIdle();
+    const c=await openProject(dir,config,clock);
+    assert.equal(c.reused,false);assert.notEqual(c.connectionPath,a.connectionPath);
+    assert.notEqual(c.connectionName,a.connectionName);
+    assert.equal((await fetch(`http://127.0.0.1:${service.mcpPort}${a.connectionPath}`)).status,404);
+    await request('cancel',{id:c.id},config);
+    assert.notEqual((await openProject(dir,config,clock)).id,c.id);
+    const configPath=join(dir,'config.json');writeFileSync(configPath,JSON.stringify(config));
+    const cli=JSON.parse((await promisify(execFile)(process.execPath,[fileURLToPath(new URL('./client.mjs',import.meta.url)),'open'],{cwd:dir,env:{...process.env,WEBGPT_CONFIG:configPath,WEBGPT_DATA_DIR:dir}})).stdout);
+    assert.equal(cli.project,realpathSync(dir));assert.equal(cli.reused,true);
+  }finally{await service.close();rmSync(dir,{recursive:true});}
+});
 test('open connection binds its project without prompt tokens and exposes only terminal tools',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'webgpt-open-route-'));let clock=1000;
   let service=await start({dir,port:0,controlPort:0,publicMcp:true,now:()=>clock});

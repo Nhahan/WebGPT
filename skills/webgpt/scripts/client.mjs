@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
 
@@ -15,6 +15,7 @@ export function configuration(env = process.env) {
     mcpPort: saved.mcpPort ?? 43137,
     controlPort: saved.controlPort ?? 43139,
     publicMcp: saved.publicMcp ?? false,
+    ...(saved.publicOrigin ? { publicOrigin: saved.publicOrigin } : {}),
   };
   if (typeof config.dataDir !== 'string' || !isAbsolute(config.dataDir)) throw Error('dataDir must be absolute');
   if (typeof config.publicMcp !== 'boolean') throw Error('publicMcp must be boolean');
@@ -22,7 +23,43 @@ export function configuration(env = process.env) {
     if (!Number.isInteger(config[key]) || config[key] < 1 || config[key] > 65535) throw Error('invalid ' + key);
   }
   if (config.mcpPort === config.controlPort) throw Error('MCP and controller ports must differ');
+  if (config.publicOrigin) {
+    const url = new URL(config.publicOrigin);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw Error('publicOrigin must be an HTTPS origin');
+    config.publicOrigin = url.origin;
+  }
   return config;
+}
+
+// Reuse an unexpired project lease without renewing it or restarting the shared worker.
+export async function openProject(cwd = process.cwd(), config = configuration(), now = Date.now()) {
+  cwd = realpathSync(cwd);
+  const statePath = join(config.dataDir, 'state.json');
+  const tasks = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : [];
+  const existing = tasks.find(t => t.mode === 'open' && t.status === 'running' && !t.collected &&
+    t.openKey && t.token && t.terminal?.cwd === cwd && now - t.lastUsed < 86400000);
+  let result;
+  if (existing) {
+    const response = await fetch(`http://127.0.0.1:${config.mcpPort}/open/${existing.openKey}`, {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'}), signal: AbortSignal.timeout(10000),
+    });
+    if (response.ok && (await response.json()).result?.tools?.length === 2)
+      result = {id:existing.id,mode:'open',connectionPath:'/open/'+existing.openKey,idleExpiresAt:existing.lastUsed+86400000,reused:true};
+    else if (response.status !== 404) throw Error('Existing open connection could not be verified');
+  }
+  if (!result) {
+    result = await request('register', {mode:'open',terminal:{cwd}}, config);
+    if (!result.connectionPath) {
+      await request('cancel', {id:result.id}, config);
+      throw Error('Running worker needs an update for message-free open; preserve active sessions and restart when idle');
+    }
+    delete result.token;
+    result.reused = false;
+  }
+  const suffix = createHash('sha256').update((config.publicOrigin ?? '') + result.id).digest('hex').slice(0,8);
+  return {...result,project:cwd,connectionName:`WebGPT Open ${basename(cwd)} ${suffix}`,
+    ...(config.publicOrigin ? {connectionUrl:config.publicOrigin+result.connectionPath} : {needsPublicOrigin:true})};
 }
 
 export async function request(action, payload, config = configuration()) {
@@ -76,13 +113,8 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
       if (args.length !== 1) throw Error('usage: client.mjs collect <task-id>');
       result = await collectTask(args[0]);
     } else if (action === 'open') {
-      if (args.length !== 1) throw Error('usage: client.mjs open <project-directory>');
-      result = await request('register', { mode: 'open', terminal: { cwd: args[0] } });
-      if (!result.connectionPath) {
-        await request('cancel', { id: result.id });
-        throw Error('Running worker needs an update for message-free open; preserve active sessions and restart when idle');
-      }
-      delete result.token; // Bind through the private connector URL, never a chat message.
+      if (args.length > 1) throw Error('usage: client.mjs open [project-directory]');
+      result = await openProject(args[0]);
     } else if (action === 'register' && args[0] === '--cwd') {
       if (args.length !== 2) throw Error('usage: client.mjs register --cwd <project-directory>');
       result = await request('register', { terminal: { cwd: args[1] } });

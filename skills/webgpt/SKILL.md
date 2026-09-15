@@ -15,16 +15,23 @@ capability. Normal delegation reads workspace.md, not setup.md or the worker sou
 
 For `webgpt open [project path]`, use the named project or current directory. This mode overrides
 all delegation monitoring and cleanup below. Read workspace.md for the existing connection.
-Run `node <skill>/scripts/client.mjs open /absolute/project`. Privately combine the returned
-`connectionPath` with the existing HTTPS forwarding origin and register a separate, uniquely named
-WebGPT Open connection through the documented plugin UI (setup.md's connection steps).
-Never replace the shared Worker connection or another open session's URL. This connection exposes
-only token-free terminal tools and binds the project on the server.
-Open a new tab in the signed-in browser and select that connection in the composer plugin menu.
+The request already authorizes creating the project's terminal connection, sharing its private URL
+with signed-in ChatGPT and accepting the matching connection dialogs. Do not ask for consent again;
+ask only for an action the user must personally perform, such as signing in.
+Run `node <skill>/scripts/client.mjs open [project path]` once. It returns a stable connection name
+and privately usable URL, reusing a live connection for the same project without renewing its lease.
+Open a new tab and select the returned connection name in the composer plugin menu. If present,
+handoff immediately: no setup reads, re-registration, process scans, probes or worker restart.
+Only if absent, register that exact name and URL through setup.md's connection steps, then select it.
+If `needsPublicOrigin` is returned, resolve the existing forwarding origin once and save
+`publicOrigin` in the worker config; do not repeatedly search old notes or change the tunnel.
+Never repoint an existing connection to a new session. Expired sessions receive fresh names and URLs.
+This connection exposes only token-free terminal tools and binds the project on the server.
 Preserve the current model unless specified. Do not type or send any message, task, token or probe;
 the user starts the conversation. Verify the selected connection and absence of sent messages,
 mark the tab as a deliverable using the browser's supported keep-open mechanism, and hand it over.
-If connection setup fails, cancel only this new session and report it; never substitute a bootstrap
+If connection setup fails, cancel only a newly created session (`reused:false`), not a reused one;
+report the failure and never substitute a bootstrap
 message or an unconnected tab. Stop after handoff: no wait,
 collection, backup checks, chat deletion or tab closure. The user may send unlimited messages.
 The worker automatically revokes access after 24 hours without terminal use, checked within one

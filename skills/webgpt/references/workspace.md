@@ -12,8 +12,13 @@ not enforced restrictions. Never silently upgrade a file-only grant to shell acc
 ## Assign
 
 For user-led `webgpt open`, use `node <skill>/scripts/client.mjs open /absolute/project` instead.
-It returns a private `connectionPath` with no completion/backup workflow. Register the existing
-HTTPS origin plus this path as a separate ChatGPT plugin connection, then select it in a blank chat.
+The path is optional and defaults to cwd. The command reuses an unexpired session for the canonical
+project path and returns `reused`, `connectionName`, and a private `connectionUrl` when `publicOrigin`
+is saved in config (`needsPublicOrigin` otherwise). Select the named connection in a blank chat;
+create it only if missing. No per-open registration, setup scan or service restart is needed.
+Reopening does not renew the lease; only terminal use does. Chats for the same live project share
+that lease. Expired/cancelled URLs stay revoked; a fresh session gets a new URL and name.
+Changing the forwarding origin also changes the name; do not repoint an old connection.
 The URL is the session capability: keep it out of chat messages, screenshots and reports. No token
 argument or bootstrap message is needed. Only `exec_command` and `write_stdin` are exposed;
 the route binds the project and rejects other tools or explicit token arguments. Never repoint an

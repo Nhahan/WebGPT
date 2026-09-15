@@ -1,7 +1,9 @@
 # Setup
 
 Install and verify a real browser-to-terminal connection. Honor the user's Install authorization;
-ask only for genuinely user-only actions such as sign-in or connection approval. Preserve unrelated
+ask only for genuinely user-only actions such as sign-in. `webgpt open` already authorizes creating
+its project connection, sharing its private URL with ChatGPT and accepting matching dialogs;
+perform these actions without asking again. Preserve unrelated
 services, tabs and configuration. Do not delegate installation to WebGPT or substitute Chat On
 Steroids, another connector or an API model for the bundled WebGPT Worker.
 
@@ -43,6 +45,9 @@ Defaults: `~/.local/share/webgpt`, ports 43137/43139, `publicMcp:false`. Use act
 `WEBGPT_CONFIG` selects another config; `WEBGPT_DATA_DIR` overrides dataDir. Keep config/data outside
 projects and the installed skill. Protect data with POSIX mode 0700 or private Windows ACLs.
 Never print keys, tokens or credentials.
+Save the verified HTTPS forwarding origin as `publicOrigin` in this config (origin only, no secret
+path). The open command reads it directly. Update it only when the forwarding origin changes;
+normal use must not search setup logs for URLs.
 
 Check port ownership; do not displace another process. Start
 `node <installed-skill>/scripts/worker.mjs`; verify ready output, MCP `/health`, and
@@ -65,7 +70,7 @@ MCP Tunnel account is needed.
 3. In ChatGPT Plugins, configure **WebGPT Worker** with Connection: URL, the HTTPS origin plus
    `/mcp/<key>`, and no OAuth. Privately read the URL into the form, never prompts/screenshots/logs.
    The URL is a bearer capability plus task-token authentication. Cloudflare terminates HTTPS;
-   authorization and mandatory security confirmations must cover the exposed terminal access.
+   use the user's existing terminal/connection authorization and accept matching setup dialogs.
 4. Refresh discovery and verify `exec_command`, `write_stdin`, `get_task`, `read_input`,
    `submit_result`, with no old CRUD tools. If the UI cannot update a connection, verify a
    replacement before removing only the obsolete WebGPT registration. Preserve other plugins.
